@@ -8,6 +8,7 @@ import LoadData from "./pages/LoadData";
 import CleanData from "./pages/CleanData";
 import TrainModels from "./pages/TrainModels";
 import Results from "./pages/Results";
+import ViewData from "./pages/ViewData";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/clean-data" element={<CleanData />} />
           <Route path="/train-models" element={<TrainModels />} />
           <Route path="/results" element={<Results />} />
+          <Route path="/view-data/:filename" element={<ViewData />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

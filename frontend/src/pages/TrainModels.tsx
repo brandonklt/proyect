@@ -20,142 +20,110 @@ const TrainModels = () => {
   const [maxDepth, setMaxDepth] = useState(10);
   const [features, setFeatures] = useState("Units Sold, Unit Price, Region, Payment Method");
   const [target, setTarget] = useState("Total Revenue");
-  const [maxRows, setMaxRows] = useState(1000);
   const [availableRows, setAvailableRows] = useState(0);
   const { toast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const storedData = localStorage.getItem('mlPipelineData');
-    if (storedData) {
-      const data = JSON.parse(storedData);
-      setAvailableRows(data.rows || 0);
-      setMaxRows(Math.min(1000, data.rows || 0));
+    const fileName = localStorage.getItem('cleanedFileName') || localStorage.getItem('uploadedFileName');
+    if (fileName) {
+      const fetchCsvInfo = async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:8000/get-csv-info/${fileName}`);
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.detail || 'Failed to fetch CSV info');
+          }
+          setAvailableRows(result.stats.rows);
+        } catch (error: any) {
+          toast({
+            title: "Error al cargar datos del CSV",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+      };
+      fetchCsvInfo();
     }
-  }, []);
+  }, [toast]);
 
-  const handleStartTraining = () => {
+  const handleStartTraining = async () => {
+    const fileName = localStorage.getItem('cleanedFileName') || localStorage.getItem('uploadedFileName');
+    if (!fileName) {
+      toast({
+        title: "Error",
+        description: "No se encontró ningún archivo para entrenar. Por favor, carga o limpia un archivo primero.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsTraining(true);
     setProgress(0);
-    setTrainingStatus("Inicializando modelo...");
+    setTrainingStatus("Enviando configuración al backend...");
 
+    const formData = new FormData();
+    formData.append('filename', fileName);
+    formData.append('modelType', modelType);
+    formData.append('testSize', String(testSize));
+    formData.append('randomState', String(randomState));
+    formData.append('nEstimators', String(nEstimators));
+    formData.append('maxDepth', String(maxDepth));
+    formData.append('features', features);
+    formData.append('target', target);
+
+    // Simular progreso mientras el backend trabaja
     const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + 10;
+      setProgress(prev => Math.min(90, prev + 5)); // No llegar al 100%
+    }, 500);
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/train-model", {
+        method: "POST",
+        body: formData,
       });
-    }, 300);
 
-    const statusUpdates = [
-      { time: 0, status: "Inicializando modelo..." },
-      { time: 1000, status: "Dividiendo datos..." },
-      { time: 2000, status: "Entrenando Random Forest..." },
-      { time: 2500, status: "Optimizando hiperparámetros..." },
-      { time: 3000, status: "Finalizando entrenamiento..." },
-    ];
+      clearInterval(progressInterval);
+      const backendResult = await response.json();
 
-    statusUpdates.forEach(({ time, status }) => {
-      setTimeout(() => setTrainingStatus(status), time);
-    });
-
-    setTimeout(() => {
-      // Obtener datos reales del CSV
-      const storedData = localStorage.getItem('mlPipelineData');
-      if (!storedData) {
-        toast({
-          title: "Error",
-          description: "No hay datos cargados. Por favor, carga un archivo CSV primero.",
-          variant: "destructive",
-        });
-        setIsTraining(false);
-        return;
+      if (!response.ok) {
+        throw new Error(backendResult.detail || "Error en el entrenamiento del modelo");
       }
 
-      const data = JSON.parse(storedData);
-      const allData = (data.allData || []).slice(0, maxRows); // Usar solo las filas especificadas
-      
-      // Generar resultados simulados basados en el dataset real
-      const featureList = features.split(',').map(f => f.trim()).filter(f => f);
-      
-      // Simular métricas de rendimiento
-      const accuracy = 85 + Math.random() * 10;
-      const precision = 83 + Math.random() * 12;
-      const recall = 82 + Math.random() * 13;
-      const f1Score = 84 + Math.random() * 11;
-      
-      // Generar datos de entrenamiento (evolución por época)
-      const trainingData = Array.from({ length: 10 }, (_, i) => ({
-        epoch: i + 1,
-        train: 70 + (i * 2) + Math.random() * 3,
-        validation: 68 + (i * 1.8) + Math.random() * 3,
-      }));
-      
-      // Simular matriz de confusión
-      const totalSamples = Math.floor(allData.length * (testSize / 100));
-      const tp = Math.floor(totalSamples * 0.45);
-      const tn = Math.floor(totalSamples * 0.42);
-      const fp = Math.floor(totalSamples * 0.08);
-      const fn = totalSamples - tp - tn - fp;
-      const confusionMatrix = [[tn, fp], [fn, tp]];
-      
-      // Generar importancia de características
-      const featureImportance = featureList.map((feature, index) => ({
-        name: feature,
-        importance: Math.max(10, 100 - (index * 15) + Math.random() * 20),
-      })).sort((a, b) => b.importance - a.importance);
-      
-      // Analizar distribución de clases (basado en variable objetivo)
-      const targetValues = allData.map((row: any) => row[target]).filter(Boolean);
-      const numericValues = targetValues.map((v: any) => parseFloat(v)).filter((v: number) => !isNaN(v));
-      
-      let classDistribution = [];
-      if (numericValues.length > 0) {
-        const median = numericValues.sort((a: number, b: number) => a - b)[Math.floor(numericValues.length / 2)];
-        const highCount = numericValues.filter((v: number) => v >= median).length;
-        const lowCount = numericValues.length - highCount;
-        
-        classDistribution = [
-          { name: `${target} Alto`, value: highCount, color: "hsl(var(--primary))" },
-          { name: `${target} Bajo`, value: lowCount, color: "hsl(var(--success))" },
-        ];
-      }
+      setTrainingStatus("Procesando resultados...");
+      setProgress(100);
 
-      const modelResults = {
-        modelType,
+      const finalResults = {
+        ...backendResult.result.metrics,
+        modelType: backendResult.result.model_type,
         testSize,
         randomState,
         nEstimators,
         maxDepth,
         features,
         target,
-        maxRows,
         timestamp: new Date().toISOString(),
-        accuracy: parseFloat(accuracy.toFixed(2)),
-        precision: parseFloat(precision.toFixed(2)),
-        recall: parseFloat(recall.toFixed(2)),
-        f1Score: parseFloat(f1Score.toFixed(2)),
-        trainingTime: `${(2 + Math.random() * 3).toFixed(2)}s`,
-        trainingData,
-        confusionMatrix,
-        featureImportance,
-        classDistribution,
       };
 
-      localStorage.setItem('mlPipelineResults', JSON.stringify(modelResults));
+      localStorage.setItem('mlPipelineResults', JSON.stringify(finalResults));
 
       toast({
         title: "Entrenamiento completado",
-        description: `${modelType} entrenado con accuracy de ${accuracy.toFixed(1)}%`,
+        description: `${modelType} entrenado con accuracy de ${finalResults.accuracy}%`,
       });
 
-      setIsTraining(false);
-      setTrainingStatus("Completado");
-      
       setTimeout(() => navigate('/results'), 1000);
-    }, 3500);
+
+    } catch (error: any) {
+      clearInterval(progressInterval);
+      toast({
+        title: "Error en el entrenamiento",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsTraining(false);
+    }
   };
 
   return (
@@ -220,23 +188,6 @@ const TrainModels = () => {
                           <option>K-Nearest Neighbors</option>
                           <option>Decision Tree</option>
                         </select>
-                      </div>
-
-                      <div>
-                        <Label htmlFor="max-rows">Número de filas a usar</Label>
-                        <div className="mt-4">
-                          <Slider 
-                            value={[maxRows]} 
-                            max={availableRows || 1000} 
-                            min={100}
-                            step={50}
-                            onValueChange={(val) => setMaxRows(val[0])}
-                          />
-                          <div className="flex justify-between items-center text-sm text-muted-foreground mt-2">
-                            <span>{maxRows.toLocaleString()} filas</span>
-                            <span className="text-xs">Disponibles: {availableRows.toLocaleString()}</span>
-                          </div>
-                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">

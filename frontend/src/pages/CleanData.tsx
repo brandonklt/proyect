@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Droplets, Settings2, Play } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, Droplets, Settings2, Play, Eye, Brain } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 const CleanData = () => {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanedFileName, setCleanedFileName] = useState<string | null>(null);
   const [dataStats, setDataStats] = useState({
     rows: 0,
     columns: 0,
@@ -19,25 +20,40 @@ const CleanData = () => {
   });
   const [previewData, setPreviewData] = useState<any[]>([]);
   const { toast } = useToast();
-  const navigate = useNavigate();
 
   useEffect(() => {
-    const storedData = localStorage.getItem('mlPipelineData');
-    if (storedData) {
-      const data = JSON.parse(storedData);
-      setDataStats({
-        rows: data.rows || 0,
-        columns: data.columns || 0,
-        nullValues: data.nullValues || 0,
-        duplicates: data.duplicates || 0,
-      });
-      
-      // Cargar datos de muestra
-      if (data.sampleRows && data.sampleRows.length > 0) {
-        setPreviewData(data.sampleRows.slice(0, 6));
+    const cleanedFile = localStorage.getItem('cleanedFileName');
+    const uploadedFile = localStorage.getItem('uploadedFileName');
+
+    // Prioritize showing the state for the cleaned file if it exists
+    const fileName = cleanedFile || uploadedFile;
+
+    if (fileName) {
+      // If a cleaned file exists, set the state to show the final buttons
+      if (cleanedFile) {
+        setCleanedFileName(cleanedFile);
       }
+
+      const fetchCsvInfo = async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:8000/get-csv-info/${fileName}`);
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.detail || 'Failed to fetch CSV info');
+          }
+          setDataStats(result.stats);
+          setPreviewData(result.preview_data);
+        } catch (error: any) {
+          toast({
+            title: "Error al cargar datos",
+            description: error.message,
+            variant: "destructive",
+          });
+        }
+      };
+      fetchCsvInfo();
     }
-  }, []);
+  }, [toast]);
 
   const handleOptionToggle = (optionId: string) => {
     setSelectedOptions(prev => 
@@ -47,7 +63,7 @@ const CleanData = () => {
     );
   };
 
-  const handleCleanData = () => {
+  const handleCleanData = async () => {
     if (selectedOptions.length === 0) {
       toast({
         title: "Selecciona al menos una opción",
@@ -57,58 +73,56 @@ const CleanData = () => {
       return;
     }
 
+    const originalFileName = localStorage.getItem('uploadedFileName');
+    if (!originalFileName) {
+      toast({
+        title: "Error",
+        description: "No se encontró el archivo original. Por favor, vuelve a cargarlo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsCleaning(true);
 
-    setTimeout(() => {
-      const storedData = JSON.parse(localStorage.getItem('mlPipelineData') || '{}');
-      let cleanedData = [...(storedData.allData || [])];
-      
-      // Aplicar limpieza según opciones seleccionadas
-      if (selectedOptions.includes('remove-na')) {
-        cleanedData = cleanedData.filter(row => 
-          Object.values(row).every(val => val !== null && val !== '' && val !== undefined)
-        );
-      }
-      
-      if (selectedOptions.includes('remove-duplicates')) {
-        const uniqueRows = new Set();
-        cleanedData = cleanedData.filter(row => {
-          const rowStr = JSON.stringify(row);
-          if (uniqueRows.has(rowStr)) return false;
-          uniqueRows.add(rowStr);
-          return true;
-        });
-      }
-      
-      // Actualizar vista previa con datos limpios
-      setPreviewData(cleanedData.slice(0, 6));
-      
-      const cleanedStats = {
-        rows: cleanedData.length,
-        columns: storedData.columns || 0,
-        nullValues: 0,
-        duplicates: 0,
-      };
+    try {
+      const response = await fetch("http://127.0.0.1:8000/clean-data", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          filename: originalFileName,
+          operations: selectedOptions,
+        }),
+      });
 
-      setDataStats(cleanedStats);
-      
-      localStorage.setItem('mlPipelineData', JSON.stringify({
-        ...storedData,
-        allData: cleanedData,
-        sampleRows: cleanedData.slice(0, 10),
-        ...cleanedStats,
-        cleaned: true,
-        cleaningMethods: selectedOptions,
-      }));
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || "Error al limpiar los datos");
+      }
+
+      setDataStats(result.cleaned_stats);
+      setPreviewData(result.preview_data);
+      setCleanedFileName(result.cleaned_filename);
+
+      localStorage.setItem('cleanedFileName', result.cleaned_filename);
 
       toast({
         title: "Limpieza completada",
-        description: `Dataset limpio: ${cleanedStats.rows} filas procesadas correctamente`,
+        description: `Dataset limpio: ${result.cleaned_stats.rows} filas procesadas correctamente`,
       });
 
+    } catch (error: any) {
+      toast({
+        title: "Error en la limpieza",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
       setIsCleaning(false);
-      setTimeout(() => navigate('/train-models'), 1000);
-    }, 2500);
+    }
   };
 
   const cleaningOptions = [
@@ -168,11 +182,11 @@ const CleanData = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        {/* Vista previa de datos */}
         {previewData.length > 0 && (
           <div className="max-w-6xl mx-auto mb-6">
             <Card className="p-6 shadow-card">
-              <h3 className="font-semibold mb-4">Datos a limpiar (vista previa)</h3>
+              <h3 className="font-semibold mb-4">Vista Previa de Datos</h3>
+              <p className="text-sm text-muted-foreground mb-4">La tabla de abajo muestra una vista previa de los datos. Después de la limpieza, la vista previa se actualizará.</p>
               <div className="border border-border rounded-lg overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -193,7 +207,7 @@ const CleanData = () => {
                               {value === null ? (
                                 <span className="text-warning italic font-semibold">null</span>
                               ) : (
-                                value
+                                String(value)
                               )}
                             </td>
                           ))}
@@ -208,7 +222,6 @@ const CleanData = () => {
         )}
 
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Options Panel */}
           <div className="lg:col-span-2">
             <Card className="p-6 shadow-card">
               <div className="flex items-center justify-between mb-6">
@@ -246,28 +259,39 @@ const CleanData = () => {
                 ))}
               </div>
 
-              <div className="flex gap-3 mt-8">
-                <Button 
-                  className="flex-1 gap-2"
-                  onClick={handleCleanData}
-                  disabled={isCleaning}
-                >
-                  <Play className="w-4 h-4" />
-                  {isCleaning ? "Limpiando..." : "Ejecutar limpieza"}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  disabled={selectedOptions.length === 0}
-                  onClick={() => {
-                    toast({
-                      title: "Vista previa",
-                      description: "Los datos mostrados arriba reflejan las opciones seleccionadas",
-                    });
-                  }}
-                >
-                  Vista previa
-                </Button>
-              </div>
+              {!cleanedFileName ? (
+                <div className="flex gap-3 mt-8">
+                  <Button 
+                    className="flex-1 gap-2"
+                    onClick={handleCleanData}
+                    disabled={isCleaning || selectedOptions.length === 0}
+                  >
+                    <Play className="w-4 h-4" />
+                    {isCleaning ? "Limpiando..." : "Ejecutar limpieza"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-3 mt-8 p-4 bg-success/10 rounded-lg border border-success/20 items-center">
+                    <div className="text-center sm:text-left flex-1 mb-2 sm:mb-0">
+                        <h4 className="font-bold text-success">Limpieza Completada</h4>
+                        <p className="text-sm text-muted-foreground">Ahora puedes visualizar el archivo o continuar al entrenamiento.</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <Link to={`/view-data/${cleanedFileName}`}>
+                            <Button variant="secondary" className="gap-2">
+                                <Eye className="w-4 h-4"/>
+                                Visualizar
+                            </Button>
+                        </Link>
+                        <Link to="/train-models">
+                            <Button className="gap-2">
+                                <Brain className="w-4 h-4"/>
+                                Continuar
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+              )}
             </Card>
           </div>
 

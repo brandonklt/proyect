@@ -1,16 +1,14 @@
-import { useEffect, useState } from "react";
-import { ArrowLeft, BarChart3, TrendingUp, Award, Download, X } from "lucide-react";
-import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { useEffect, useState } from 'react';
+import { ArrowLeft, Target, TestTube2, Scale, BarChart, BrainCircuit, LayoutGrid, Upload } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useToast } from "@/hooks/use-toast";
+import { ResponsiveContainer, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart as RechartsBarChart } from 'recharts';
 
 const Results = () => {
   const [results, setResults] = useState<any>(null);
-  const [showDetails, setShowDetails] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -20,423 +18,183 @@ const Results = () => {
     }
   }, []);
 
+  const handleExportToDb = async () => {
+    if (!results) return;
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/export-to-db", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(results),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Error al exportar los resultados");
+      }
+
+      toast({
+        title: "Exportación exitosa",
+        description: "Los resultados del modelo se han guardado en la base de datos.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error en la exportación",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!results) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <BarChart3 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">No hay resultados disponibles</h2>
-          <p className="text-muted-foreground mb-4">Primero debes entrenar un modelo</p>
+          <h1 className="text-2xl font-bold mb-4">No se encontraron resultados</h1>
+          <p className="text-muted-foreground mb-6">Parece que no has entrenado ningún modelo todavía.</p>
           <Link to="/train-models">
-            <Button>Ir a Entrenar Modelos</Button>
+            <Button>Ir a entrenar un modelo</Button>
           </Link>
         </div>
       </div>
     );
   }
 
-  const metrics = [
-    { label: "Accuracy", value: results.accuracy ? `${results.accuracy}%` : 'N/A', trend: results.accuracy ? `+${(Math.random() * 3).toFixed(1)}%` : '-' },
-    { label: "Precision", value: results.precision ? `${results.precision}%` : 'N/A', trend: results.precision ? `+${(Math.random() * 2).toFixed(1)}%` : '-' },
-    { label: "Recall", value: results.recall ? `${results.recall}%` : 'N/A', trend: results.recall ? `+${(Math.random() * 3).toFixed(1)}%` : '-' },
-    { label: "F1-Score", value: results.f1Score ? `${results.f1Score}%` : 'N/A', trend: results.f1Score ? `+${(Math.random() * 2.5).toFixed(1)}%` : '-' },
-  ];
+  const { modelType, accuracy, precision, recall, f1Score, confusionMatrix, featureImportance, testSize, randomState, nEstimators, maxDepth, features, target, timestamp } = results;
 
-  const trainingData = results.trainingData || [];
-  const confusionMatrix = results.confusionMatrix || [[0, 0], [0, 0]];
-  const featureImportance = results.featureImportance || [];
-  const classDistribution = (results.classDistribution || []).map((item: any, index: number) => ({
-    ...item,
-    color: index === 0 ? "hsl(var(--primary))" : "hsl(var(--success))"
-  }));
-
-  // Datos de comparación de modelos
-  const modelComparison = [
-    { name: results.modelType, accuracy: results.accuracy, precision: results.precision, recall: results.recall, f1: results.f1Score },
-    { name: 'Logistic Regression', accuracy: Math.max(60, results.accuracy - 5), precision: Math.max(58, results.precision - 4), recall: Math.max(59, results.recall - 6), f1: Math.max(58, results.f1Score - 5) },
-    { name: 'Decision Tree', accuracy: Math.max(62, results.accuracy - 8), precision: Math.max(60, results.precision - 7), recall: Math.max(61, results.recall - 9), f1: Math.max(60, results.f1Score - 8) },
-  ];
+  const formattedTimestamp = new Date(timestamp).toLocaleString('es-ES', {
+    dateStyle: 'long', 
+    timeStyle: 'short'
+  });
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-4">
-          <Link to="/" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors mb-4">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver al dashboard
-          </Link>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center">
-                <BarChart3 className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold text-foreground">Resultados</h1>
-                <p className="text-muted-foreground">Visualiza métricas, predicciones y análisis de rendimiento</p>
-              </div>
+          <div className="flex justify-between items-center mb-4">
+            <Link to="/" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Volver al dashboard
+            </Link>
+            <Button onClick={handleExportToDb}><Upload className="w-4 h-4 mr-2"/>Exportar a DB</Button>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center">
+              <TestTube2 className="w-6 h-6 text-primary-foreground" />
             </div>
-            <Button 
-              variant="outline" 
-              className="gap-2"
-              onClick={() => {
-                const reportData = {
-                  modelo: results.modelType,
-                  fecha: new Date(results.timestamp).toLocaleString('es-ES'),
-                  metricas: {
-                    accuracy: results.accuracy,
-                    precision: results.precision,
-                    recall: results.recall,
-                    f1Score: results.f1Score
-                  },
-                  configuracion: {
-                    nEstimators: results.nEstimators,
-                    maxDepth: results.maxDepth,
-                    testSize: results.testSize,
-                    features: results.features,
-                    target: results.target
-                  }
-                };
-                
-                const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `reporte-modelo-${results.modelType}-${new Date().getTime()}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                
-                toast({
-                  title: "Reporte exportado",
-                  description: "El reporte se ha descargado correctamente",
-                });
-              }}
-            >
-              <Download className="w-4 h-4" />
-              Exportar reporte
-            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Resultados del Entrenamiento</h1>
+              <p className="text-muted-foreground">Análisis detallado del rendimiento del modelo: {modelType}</p>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        <div className="max-w-6xl mx-auto space-y-6">
-          {/* Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {metrics.map((metric) => (
-              <Card key={metric.label} className="p-6 shadow-card">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">{metric.label}</p>
-                    <p className="text-3xl font-bold text-foreground">{metric.value}</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-success text-sm font-medium">
-                    <TrendingUp className="w-4 h-4" />
-                    {metric.trend}
-                  </div>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Columna Izquierda: Métricas y Gráficos */}
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="p-6 shadow-card">
+              <h3 className="text-xl font-semibold mb-4 flex items-center gap-3"><Scale className="w-5 h-5 text-primary"/>Métricas de Rendimiento</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Accuracy</p>
+                  <p className="text-3xl font-bold">{accuracy.toFixed(2)}%</p>
                 </div>
-              </Card>
-            ))}
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Precision</p>
+                  <p className="text-3xl font-bold">{precision.toFixed(2)}%</p>
+                </div>
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Recall</p>
+                  <p className="text-3xl font-bold">{recall.toFixed(2)}%</p>
+                </div>
+                <div className="p-4 bg-muted/30 rounded-lg">
+                  <p className="text-sm text-muted-foreground">F1-Score</p>
+                  <p className="text-3xl font-bold">{f1Score.toFixed(2)}%</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6 shadow-card">
+              <Tabs defaultValue="confusion-matrix">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="confusion-matrix"><LayoutGrid className="w-4 h-4 mr-2"/>Matriz de Confusión</TabsTrigger>
+                  <TabsTrigger value="feature-importance"><BarChart className="w-4 h-4 mr-2"/>Importancia de Features</TabsTrigger>
+                </TabsList>
+                <TabsContent value="confusion-matrix">
+                  <div className="flex justify-center mt-4">
+                    <div className="grid grid-cols-2 gap-2 text-center w-64">
+                      <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-500/50">
+                        <p className="text-sm text-muted-foreground">Verdaderos Positivos</p>
+                        <p className="text-2xl font-bold">{confusionMatrix[1][1]}</p>
+                      </div>
+                      <div className="p-4 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-500/50">
+                        <p className="text-sm text-muted-foreground">Falsos Positivos</p>
+                        <p className="text-2xl font-bold">{confusionMatrix[0][1]}</p>
+                      </div>
+                      <div className="p-4 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-500/50">
+                        <p className="text-sm text-muted-foreground">Falsos Negativos</p>
+                        <p className="text-2xl font-bold">{confusionMatrix[1][0]}</p>
+                      </div>
+                      <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-500/50">
+                        <p className="text-sm text-muted-foreground">Verdaderos Negativos</p>
+                        <p className="text-2xl font-bold">{confusionMatrix[0][0]}</p>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="feature-importance">
+                  <div style={{ width: '100%', height: 300 }}>
+                    <ResponsiveContainer>
+                      <RechartsBarChart data={featureImportance} layout="vertical" margin={{ top: 5, right: 20, left: 50, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" />
+                        <YAxis dataKey="feature" type="category" width={80} />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="importance" fill="#8884d8" />
+                      </RechartsBarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </Card>
           </div>
 
-          <Tabs defaultValue="metrics" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="metrics">Métricas</TabsTrigger>
-              <TabsTrigger value="training">Entrenamiento</TabsTrigger>
-              <TabsTrigger value="comparison">Comparación</TabsTrigger>
-              <TabsTrigger value="confusion">Matriz confusión</TabsTrigger>
-              <TabsTrigger value="feature">Features</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="metrics">
-              <Card className="p-8 shadow-card">
-                <h3 className="text-xl font-semibold mb-6">Distribución de clases</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <PieChart>
-                    <Pie
-                      data={classDistribution}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={120}
-                      fill="hsl(var(--primary))"
-                      dataKey="value"
-                    >
-                      {classDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="training">
-              <Card className="p-8 shadow-card">
-                <h3 className="text-xl font-semibold mb-6">Evolución durante el entrenamiento</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={trainingData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="epoch" 
-                      stroke="hsl(var(--muted-foreground))"
-                      label={{ value: 'Época', position: 'insideBottom', offset: -5 }}
-                    />
-                    <YAxis 
-                      stroke="hsl(var(--muted-foreground))"
-                      label={{ value: 'Accuracy', angle: -90, position: 'insideLeft' }}
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
-                    />
-                    <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="train" 
-                      stroke="hsl(var(--primary))" 
-                      strokeWidth={2}
-                      name="Entrenamiento"
-                      dot={{ fill: 'hsl(var(--primary))' }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="validation" 
-                      stroke="hsl(var(--success))" 
-                      strokeWidth={2}
-                      name="Validación"
-                      dot={{ fill: 'hsl(var(--success))' }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="comparison">
-              <Card className="p-8 shadow-card">
-                <h3 className="text-xl font-semibold mb-6">Comparación de modelos</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={modelComparison}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="name" 
-                      stroke="hsl(var(--muted-foreground))"
-                      angle={-15}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis 
-                      stroke="hsl(var(--muted-foreground))"
-                      label={{ value: 'Porcentaje (%)', angle: -90, position: 'insideLeft' }}
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="accuracy" fill="hsl(var(--primary))" name="Accuracy" />
-                    <Bar dataKey="precision" fill="hsl(var(--success))" name="Precision" />
-                    <Bar dataKey="recall" fill="hsl(var(--chart-2))" name="Recall" />
-                    <Bar dataKey="f1" fill="hsl(var(--chart-3))" name="F1-Score" />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="mt-4 text-sm text-muted-foreground">
-                  <p>* Comparación del modelo entrenado ({results.modelType}) vs. otros algoritmos de clasificación comunes</p>
-                </div>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="confusion">
-              <Card className="p-8 shadow-card">
-                <h3 className="text-xl font-semibold mb-6">Matriz de confusión</h3>
-                <div className="max-w-md mx-auto">
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div></div>
-                    <div className="grid grid-cols-2 gap-4 text-center text-sm font-medium text-muted-foreground">
-                      <div>Pred: No</div>
-                      <div>Pred: Sí</div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col justify-center gap-20 text-sm font-medium text-muted-foreground">
-                      <div>Real: No</div>
-                      <div>Real: Sí</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      {confusionMatrix.map((row, i) =>
-                        row.map((value, j) => (
-                          <div
-                            key={`${i}-${j}`}
-                            className={`aspect-square rounded-lg flex items-center justify-center text-2xl font-bold ${
-                              i === j
-                                ? "bg-success/20 text-success"
-                                : "bg-destructive/20 text-destructive"
-                            }`}
-                          >
-                            {value}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="feature">
-              <Card className="p-8 shadow-card">
-                <h3 className="text-xl font-semibold mb-6">Importancia de características</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart 
-                    data={featureImportance} 
-                    layout="vertical"
-                    margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis 
-                      type="number" 
-                      stroke="hsl(var(--muted-foreground))"
-                      label={{ value: 'Importancia (%)', position: 'insideBottom', offset: -5 }}
-                    />
-                    <YAxis 
-                      type="category" 
-                      dataKey="name" 
-                      stroke="hsl(var(--muted-foreground))"
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }}
-                    />
-                    <Bar dataKey="importance" fill="hsl(var(--primary))" name="Importancia" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
-            </TabsContent>
-          </Tabs>
-
-          {/* Best Model Card */}
-          <Card className="p-6 shadow-card bg-gradient-card border-primary/20">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Award className="w-6 h-6 text-primary" />
+          {/* Columna Derecha: Detalles y Features */}
+          <div className="space-y-6">
+            <Card className="p-6 shadow-card">
+              <h3 className="text-xl font-semibold mb-4 flex items-center gap-3"><BrainCircuit className="w-5 h-5 text-primary"/>Detalles del Modelo</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Modelo:</span> <span className="font-semibold">{modelType}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Fecha:</span> <span className="font-semibold">{formattedTimestamp}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Tamaño del Test:</span> <span className="font-semibold">{testSize}%</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Random State:</span> <span className="font-semibold">{randomState}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">N° Estimadores:</span> <span className="font-semibold">{nEstimators}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Profundidad Máxima:</span> <span className="font-semibold">{maxDepth}</span></div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-lg">Configuración del modelo</h3>
-                <p className="text-sm text-muted-foreground">{results.modelType}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Configuración: {results.nEstimators} estimadores, profundidad {results.maxDepth}, test size {results.testSize}%
-                </p>
-                {results.accuracy && (
-                  <p className="text-xs text-success mt-2">
-                    Accuracy: {results.accuracy}% • Tiempo: {results.trainingTime}
-                  </p>
-                )}
-              </div>
-              <Button onClick={() => setShowDetails(true)}>Ver detalles</Button>
-            </div>
-          </Card>
+            </Card>
 
-          {/* Details Dialog */}
-          <Dialog open={showDetails} onOpenChange={setShowDetails}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Detalles del modelo - {results.modelType}</DialogTitle>
-                <DialogDescription>
-                  Información completa sobre el entrenamiento y configuración del modelo
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-6 py-4">
+            <Card className="p-6 shadow-card">
+              <h3 className="text-xl font-semibold mb-4 flex items-center gap-3"><Target className="w-5 h-5 text-primary"/>Features y Target</h3>
+              <div className="space-y-3 text-sm">
                 <div>
-                  <h4 className="font-semibold mb-3">Hiperparámetros</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Tipo de modelo:</span>
-                      <span className="font-medium">{results.modelType}</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">N° estimadores:</span>
-                      <span className="font-medium">{results.nEstimators}</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Profundidad máx:</span>
-                      <span className="font-medium">{results.maxDepth}</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Test size:</span>
-                      <span className="font-medium">{results.testSize}%</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Random state:</span>
-                      <span className="font-medium">{results.randomState}</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-muted/50 rounded">
-                      <span className="text-muted-foreground">Tiempo:</span>
-                      <span className="font-medium">{results.trainingTime}</span>
-                    </div>
-                  </div>
+                  <p className="text-muted-foreground mb-1">Features utilizadas:</p>
+                  <p className="font-semibold break-words">{features}</p>
                 </div>
-
                 <div>
-                  <h4 className="font-semibold mb-3">Métricas de rendimiento</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex justify-between p-2 bg-success/10 rounded">
-                      <span className="text-muted-foreground">Accuracy:</span>
-                      <span className="font-semibold text-success">{results.accuracy}%</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-success/10 rounded">
-                      <span className="text-muted-foreground">Precision:</span>
-                      <span className="font-semibold text-success">{results.precision}%</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-success/10 rounded">
-                      <span className="text-muted-foreground">Recall:</span>
-                      <span className="font-semibold text-success">{results.recall}%</span>
-                    </div>
-                    <div className="flex justify-between p-2 bg-success/10 rounded">
-                      <span className="text-muted-foreground">F1-Score:</span>
-                      <span className="font-semibold text-success">{results.f1Score}%</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold mb-3">Variables del modelo</h4>
-                  <div className="space-y-2">
-                    <div className="p-3 bg-muted/50 rounded">
-                      <span className="text-sm text-muted-foreground block mb-1">Features utilizados:</span>
-                      <span className="text-sm font-medium">{results.features}</span>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded">
-                      <span className="text-sm text-muted-foreground block mb-1">Variable objetivo:</span>
-                      <span className="text-sm font-medium">{results.target}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold mb-2">Información adicional</h4>
-                  <p className="text-xs text-muted-foreground">
-                    Fecha de entrenamiento: {new Date(results.timestamp).toLocaleString('es-ES')}
-                  </p>
+                  <p className="text-muted-foreground mb-1">Variable Objetivo:</p>
+                  <p className="font-semibold">{target}</p>
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
+            </Card>
+          </div>
         </div>
       </main>
     </div>
