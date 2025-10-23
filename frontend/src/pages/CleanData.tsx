@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Droplets, Settings2, Play, Eye, Brain } from "lucide-react";
+import { ArrowLeft, Droplets, Settings2, Play, Eye, Brain, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
 const CleanData = () => {
@@ -19,6 +20,8 @@ const CleanData = () => {
     duplicates: 0,
   });
   const [previewData, setPreviewData] = useState<any[]>([]);
+  const [filteredData, setFilteredData] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -28,31 +31,47 @@ const CleanData = () => {
     // Prioritize showing the state for the cleaned file if it exists
     const fileName = cleanedFile || uploadedFile;
 
-    if (fileName) {
-      // If a cleaned file exists, set the state to show the final buttons
-      if (cleanedFile) {
-        setCleanedFileName(cleanedFile);
-      }
-
-      const fetchCsvInfo = async () => {
-        try {
-          const response = await fetch(`http://127.0.0.1:8000/get-csv-info/${fileName}`);
-          const result = await response.json();
-          if (!response.ok) {
-            throw new Error(result.detail || 'Failed to fetch CSV info');
-          }
-          setDataStats(result.stats);
-          setPreviewData(result.preview_data);
-        } catch (error: any) {
-          toast({
-            title: "Error al cargar datos",
-            description: error.message,
-            variant: "destructive",
-          });
+    const fetchCsvInfo = async () => {
+      try {
+        let response;
+        if (fileName) {
+          response = await fetch(`http://127.0.0.1:8000/get-csv-info/${fileName}`);
+        } else {
+          // Si no hay archivo específico, obtener el más reciente
+          response = await fetch(`http://127.0.0.1:8000/get-csv-info/latest`);
         }
-      };
-      fetchCsvInfo();
-    }
+        
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.detail || 'Failed to fetch CSV info');
+        }
+        
+        setDataStats(result.stats);
+        setPreviewData(result.preview_data);
+        setFilteredData(result.preview_data);
+        
+        // Si se devolvió un nombre de archivo diferente, actualizar el localStorage
+        if (result.actual_filename && result.actual_filename !== fileName) {
+          if (result.actual_filename.startsWith('cleaned_')) {
+            setCleanedFileName(result.actual_filename);
+            localStorage.setItem('cleanedFileName', result.actual_filename);
+          } else {
+            localStorage.setItem('uploadedFileName', result.actual_filename);
+          }
+        } else if (cleanedFile) {
+          setCleanedFileName(cleanedFile);
+        }
+        
+      } catch (error: any) {
+        toast({
+          title: "Error al cargar datos",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    };
+    
+    fetchCsvInfo();
   }, [toast]);
 
   const handleOptionToggle = (optionId: string) => {
@@ -61,6 +80,31 @@ const CleanData = () => {
         ? prev.filter(id => id !== optionId)
         : [...prev, optionId]
     );
+  };
+
+  const handleSearch = () => {
+    if (!searchTerm.trim()) {
+      setFilteredData(previewData);
+      return;
+    }
+
+    const filtered = previewData.filter(row => 
+      Object.values(row).some(value => 
+        String(value).toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    );
+    setFilteredData(filtered);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setFilteredData(previewData);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
   };
 
   const handleCleanData = async () => {
@@ -103,15 +147,17 @@ const CleanData = () => {
         throw new Error(result.detail || "Error al limpiar los datos");
       }
 
-      setDataStats(result.cleaned_stats);
+      // Usar stats originales para mostrar en el frontend (mantener nulos visibles)
+      setDataStats(result.original_stats || result.cleaned_stats);
       setPreviewData(result.preview_data);
+      setFilteredData(result.preview_data);
       setCleanedFileName(result.cleaned_filename);
 
       localStorage.setItem('cleanedFileName', result.cleaned_filename);
 
       toast({
         title: "Limpieza completada",
-        description: `Dataset limpio: ${result.cleaned_stats.rows} filas procesadas correctamente`,
+        description: `Dataset limpio: ${result.cleaned_stats.rows} filas procesadas correctamente. Los nulos siguen visibles en el frontend.`,
       });
 
     } catch (error: any) {
@@ -185,36 +231,76 @@ const CleanData = () => {
         {previewData.length > 0 && (
           <div className="max-w-6xl mx-auto mb-6">
             <Card className="p-6 shadow-card">
-              <h3 className="font-semibold mb-4">Vista Previa de Datos</h3>
-              <p className="text-sm text-muted-foreground mb-4">La tabla de abajo muestra una vista previa de los datos. Después de la limpieza, la vista previa se actualizará.</p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold">Vista Previa de Datos</h3>
+                  <p className="text-sm text-muted-foreground">La tabla de abajo muestra una vista previa de los datos. Después de la limpieza, la vista previa se actualizará.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Buscar en los datos..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      className="w-64"
+                    />
+                    <Button onClick={handleSearch} size="sm" variant="outline">
+                      <Search className="w-4 h-4" />
+                    </Button>
+                    <Button onClick={handleClearSearch} size="sm" variant="outline">
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
               <div className="border border-border rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/30">
-                      <tr>
-                        {Object.keys(previewData[0]).map((key) => (
-                          <th key={key} className="px-4 py-2 text-left font-medium text-muted-foreground border-b border-border">
-                            {key}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewData.map((row, idx) => (
-                        <tr key={idx} className="border-b border-border hover:bg-muted/20">
-                          {Object.values(row).map((value: any, cellIdx) => (
-                            <td key={cellIdx} className="px-4 py-2">
-                              {value === null ? (
-                                <span className="text-warning italic font-semibold">null</span>
-                              ) : (
-                                String(value)
-                              )}
-                            </td>
+                <div className="bg-muted/50 px-4 py-2 border-b border-border flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    {filteredData.length !== previewData.length ? (
+                      <>Mostrando {filteredData.length} de {previewData.length} filas</>
+                    ) : (
+                      <>Vista previa de datos</>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {Object.keys(previewData[0]).length} columnas
+                  </div>
+                </div>
+                <div className="overflow-x-auto max-h-96">
+                  <div className="min-w-full">
+                    <table className="w-full text-sm min-w-max">
+                      <thead className="bg-muted/30 sticky top-0">
+                        <tr>
+                          {Object.keys(previewData[0]).map((key) => (
+                            <th key={key} className="px-4 py-2 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap min-w-[120px]">
+                              {key}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredData.map((row, idx) => (
+                          <tr key={idx} className="border-b border-border hover:bg-muted/20">
+                            {Object.values(row).map((value: any, cellIdx) => (
+                              <td key={cellIdx} className="px-4 py-2 whitespace-nowrap min-w-[120px]">
+                                {value === null ? (
+                                  <span className="text-pink-500 italic font-semibold bg-pink-50 px-2 py-1 rounded text-xs">null</span>
+                                ) : (
+                                  <span className="truncate block max-w-[200px]" title={String(value)}>
+                                    {String(value)}
+                                  </span>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div className="bg-muted/30 px-4 py-2 text-xs text-muted-foreground border-t border-border">
+                  💡 Desplázate horizontalmente para ver todas las columnas
                 </div>
               </div>
             </Card>
@@ -274,7 +360,7 @@ const CleanData = () => {
                 <div className="flex flex-col sm:flex-row gap-3 mt-8 p-4 bg-success/10 rounded-lg border border-success/20 items-center">
                     <div className="text-center sm:text-left flex-1 mb-2 sm:mb-0">
                         <h4 className="font-bold text-success">Limpieza Completada</h4>
-                        <p className="text-sm text-muted-foreground">Ahora puedes visualizar el archivo o continuar al entrenamiento.</p>
+                        <p className="text-sm text-muted-foreground">Los datos están listos para entrenamiento. Los valores nulos siguen visibles en el frontend pero serán ignorados durante el entrenamiento.</p>
                     </div>
                     <div className="flex gap-3">
                         <Link to={`/view-data/${cleanedFileName}`}>
@@ -299,6 +385,13 @@ const CleanData = () => {
           <div className="space-y-6">
             <Card className="p-6 shadow-card">
               <h3 className="font-semibold mb-4">Estadísticas del dataset</h3>
+              {cleanedFileName && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Nota:</strong> Los valores nulos siguen visibles en el frontend (color rosado) pero serán ignorados durante el entrenamiento del modelo.
+                  </p>
+                </div>
+              )}
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between text-sm mb-2">

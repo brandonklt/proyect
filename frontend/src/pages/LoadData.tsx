@@ -187,36 +187,46 @@ const LoadData = () => {
 
                 {previewData.length > 0 && (
                   <div className="border border-border rounded-lg overflow-hidden">
-                    <div className="bg-muted/50 px-4 py-2 border-b border-border">
+                    <div className="bg-muted/50 px-4 py-2 border-b border-border flex items-center justify-between">
                       <h4 className="font-semibold text-sm">Vista previa de datos (6 filas)</h4>
+                      <div className="text-xs text-muted-foreground">
+                        {Object.keys(previewData[0]).length} columnas
+                      </div>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/30">
-                          <tr>
-                            {Object.keys(previewData[0]).map((key) => (
-                              <th key={key} className="px-4 py-2 text-left font-medium text-muted-foreground border-b border-border">
-                                {key}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewData.map((row, idx) => (
-                            <tr key={idx} className="border-b border-border hover:bg-muted/20">
-                              {Object.values(row).map((value: any, cellIdx) => (
-                                <td key={cellIdx} className="px-4 py-2">
-                                  {value === null ? (
-                                    <span className="text-warning italic">null</span>
-                                  ) : (
-                                    value
-                                  )}
-                                </td>
+                    <div className="overflow-x-auto max-h-96">
+                      <div className="min-w-full">
+                        <table className="w-full text-sm min-w-max">
+                          <thead className="bg-muted/30 sticky top-0">
+                            <tr>
+                              {Object.keys(previewData[0]).map((key) => (
+                                <th key={key} className="px-4 py-2 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap min-w-[120px]">
+                                  {key}
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {previewData.map((row, idx) => (
+                              <tr key={idx} className="border-b border-border hover:bg-muted/20">
+                                {Object.values(row).map((value: any, cellIdx) => (
+                                  <td key={cellIdx} className="px-4 py-2 whitespace-nowrap min-w-[120px]">
+                                    {value === null ? (
+                                      <span className="text-warning italic bg-warning/10 px-2 py-1 rounded text-xs">null</span>
+                                    ) : (
+                                      <span className="truncate block max-w-[200px]" title={String(value)}>
+                                        {String(value)}
+                                      </span>
+                                    )}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div className="bg-muted/30 px-4 py-2 text-xs text-muted-foreground border-t border-border">
+                      💡 Desplázate horizontalmente para ver todas las columnas
                     </div>
                   </div>
                 )}
