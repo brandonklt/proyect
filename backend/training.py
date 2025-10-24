@@ -39,8 +39,14 @@ def train_model(file_path: str, model_config: dict):
     print(f"Valores nulos en dataset original: {df.isnull().sum().sum()}")
 
     # --- Preprocesamiento de datos ---
-    feature_cols = [col.strip() for col in model_config['features'].split(',')]
-    target_col = model_config['target'].strip()
+    features = model_config.get('features')
+    if isinstance(features, str):
+        feature_cols = [col.strip().replace(' ', '_') for col in features.split(',')]
+    elif isinstance(features, list):
+        feature_cols = [str(item).strip().replace(' ', '_') for item in features]
+    else:
+        feature_cols = []
+    target_col = model_config['target'].strip().replace(' ', '_')
     
     if not all(col in df.columns for col in feature_cols):
         raise ValueError("Una o más columnas de features no se encontraron en el archivo.")
