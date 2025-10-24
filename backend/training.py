@@ -34,6 +34,7 @@ def handle_nulls_for_training(df: pd.DataFrame, feature_cols: list, target_col: 
 def train_model(file_path: str, model_config: dict):
     """Entrena un modelo de clasificación y devuelve métricas detalladas."""
     df = pd.read_csv(file_path)
+    df.columns = df.columns.str.strip().str.replace(' ', '_')
     
     print(f"Dataset original: {df.shape[0]} filas, {df.shape[1]} columnas")
     print(f"Valores nulos en dataset original: {df.isnull().sum().sum()}")
