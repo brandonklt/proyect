@@ -1,42 +1,70 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
+/*
+ * Integración del tema "Neon Pro" con las clases
+ * por defecto de Vite (index.css)
+ *
+ * Coloca esto DENTRO de tu bloque @layer components 
+ * o justo después de él.
+ */
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+@layer components {
+  
+  /* Contenedor principal (Layout, sin cambios de tema) */
+  #root {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+    text-align: center;
   }
-  to {
-    transform: rotate(360deg);
+
+  .logo {
+    height: 6em;
+    padding: 1.5em; /* p-6 */
+    will-change: filter;
+    transition: filter 300ms;
   }
-}
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+  /* --- MEJORA: Glow del Logo --- */
+  /* * Unificamos ambos :hover (el genérico y el de React) 
+   * para usar el color --primary de tu tema.
+   */
+  .logo:hover,
+  .logo.react:hover {
+    /* Usamos la variable --primary (tu cian/azul) para el 'glow' */
+    filter: drop-shadow(0 0 2em hsla(var(--primary) / 0.7));
   }
-}
 
-.card {
-  padding: 2em;
-}
+  /* Animación (Sin cambios) */
+  @keyframes logo-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
-.read-the-docs {
-  color: #888;
+  @media (prefers-reduced-motion: no-preference) {
+    a:nth-of-type(2) .logo {
+      animation: logo-spin infinite 20s linear;
+    }
+  }
+
+  /* --- MEJORA: Estilo de Card --- */
+  /* * Aplicamos tu componente .card-pro a la clase .card 
+   * por defecto de Vite.
+   */
+  .card {
+    /* * Aplicamos los estilos base de 'card-pro'
+     * y mantenemos el padding original de Vite (p-8 = 2em)
+     */
+    @apply card-pro p-8; 
+  }
+
+  /* --- MEJORA: Texto Secundario --- */
+  /* * Usamos el color de texto 'muted' del tema en lugar 
+   * del gris estático #888.
+   */
+  .read-the-docs {
+    @apply text-muted-foreground; 
+  }
 }

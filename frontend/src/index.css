@@ -2,122 +2,191 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 220 25% 97%;
-    --foreground: 222 47% 11%;
+    /* --- Tema Base (Oscuro Neón Refinado) --- */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    /* Un fondo ligeramente más frío y oscuro */
+    --background: 220 12% 5%; 
+    --foreground: 210 15% 96%; /* Un blanco ligeramente más suave */
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --card: 220 12% 8%; /* Gris oscuro frío */
+    --card-foreground: 210 15% 96%;
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 0 0% 100%;
+    --popover: 220 10% 6%;
+    --popover-foreground: 210 15% 96%;
 
-    --secondary: 214 95% 93%;
-    --secondary-foreground: 221 83% 53%;
+    /* --- CAMBIO CLAVE: Primario --- */
+    /* Menos saturado y ligeramente más azulado para ser menos "neón" y más "tech" */
+    --primary: 195 90% 50%; /* Cyan "Eléctrico" en lugar de Neón puro */
+    --primary-foreground: 220 12% 10%; /* Texto oscuro para contraste fuerte */
 
-    --muted: 214 32% 91%;
-    --muted-foreground: 215 16% 47%;
+    --secondary: 210 15% 25%;
+    --secondary-foreground: 195 80% 85%; /* Cyan claro alineado con el nuevo primario */
 
-    --accent: 221 83% 53%;
-    --accent-foreground: 0 0% 100%;
+    --muted: 220 10% 15%;
+    --muted-foreground: 215 15% 55%;
 
-    --destructive: 0 84% 60%;
+    --accent: 195 90% 50%; /* Igual que el primario */
+    --accent-foreground: 220 12% 10%;
+
+    --destructive: 0 80% 55%; 
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 88%;
-    --input: 214 32% 88%;
-    --ring: 221 83% 53%;
+    /* --- CAMBIO CLAVE: Bordes y Rings --- */
+    /* Borde neutral por defecto, para que el acento destaque en hover/focus */
+    --border: 220 10% 20%; /* Gris oscuro sutil */
+    --input: 220 10% 12%; 
+    --ring: 195 90% 55%; /* Ring brillante alineado con el primario */
 
     --radius: 0.75rem;
 
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
+    /* Colores de estado (Neón sutil) */
+    --success: 120 80% 45%; /* Verde más controlado */
+    --success-foreground: 220 12% 10%;
+    --warning: 45 90% 50%; /* Amarillo controlado */
+    --warning-foreground: 220 12% 10%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
+    /* --- Gradientes Refinados --- */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(205, 100%, 60%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)) 0%, hsl(220, 12%, 10%) 100%);
+    --gradient-header: linear-gradient(90deg, hsla(var(--background) / 0.8) 0%, hsla(var(--card) / 0.7) 100%);
 
-    --gradient-primary: linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(243 75% 59%) 100%);
-    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(220 25% 98%) 100%);
+    /* --- CAMBIO CLAVE: Sombras "Profesionales" --- */
+    /* Se separan sombras de profundidad (oscuras) y sombras de "glow" (color) */
+    --shadow-depth-md: 0 4px 10px -2px hsla(220, 15%, 5%, 0.4);
+    --shadow-depth-lg: 0 8px 25px -4px hsla(220, 15%, 5%, 0.5);
     
-    --shadow-card: 0 4px 20px -2px hsl(221 83% 53% / 0.08);
-    --shadow-hover: 0 12px 40px -4px hsl(221 83% 53% / 0.15);
+    /* Usamos el "glow" de forma más sutil y específica */
+    --shadow-glow-primary-sm: 0 0 8px -2px hsla(var(--primary) / 0.5);
+    --shadow-glow-primary-md: 0 0 15px -3px hsla(var(--primary) / 0.6);
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Combinamos profundidad y un sutil glow para el hover */
+    --shadow-card: var(--shadow-depth-md);
+    --shadow-hover: var(--shadow-depth-lg), var(--shadow-glow-primary-sm);
+    
+    --shadow-input-inset: inset 0 2px 5px 0 hsla(0, 0%, 0%, 0.3);
   }
 
-  .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+  /* Modo Claro (Ajustado para el nuevo primario) */
+  .light {
+      --background: 210 50% 98%;
+      --foreground: 225 30% 20%;
+      --card: 0 0% 100%;
+      --card-foreground: 225 30% 20%;
+      --popover: 0 0% 100%;
+      --popover-foreground: 225 30% 20%;
+      --primary: 195 90% 40%; /* Un azul/cyan fuerte para contraste */
+      --primary-foreground: 0 0% 100%;
+      --secondary: 195 60% 90%;
+      --secondary-foreground: 195 90% 30%;
+      --muted: 214 32% 91%;
+      --muted-foreground: 215 16% 47%;
+      --accent: 195 90% 40%;
+      --accent-foreground: 0 0% 100%;
+      --destructive: 0 80% 50%;
+      --destructive-foreground: 0 0% 100%;
+      --border: 195 30% 80%; /* Borde azulado claro */
+      --input: 0 0% 100%;
+      --ring: 195 90% 45%;
+      --success: 120 70% 40%;
+      --success-foreground: 0 0% 100%;
+      --warning: 45 90% 45%;
+      --warning-foreground: 0 0% 100%;
 
-    --card: 217 33% 17%;
-    --card-foreground: 210 40% 98%;
+      --gradient-primary: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(205, 90%, 50%) 100%);
+      --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(210 50% 96%) 100%);
+      --gradient-header: linear-gradient(90deg, hsla(225, 30%, 98%, 0.8) 0%, hsla(195, 60%, 95%, 0.7) 100%);
 
-    --popover: 217 33% 17%;
-    --popover-foreground: 210 40% 98%;
+      /* Sombras más estándar y suaves para el modo claro */
+      --shadow-depth-md: 0 4px 10px -2px hsla(195, 50%, 20%, 0.1);
+      --shadow-depth-lg: 0 8px 25px -4px hsla(195, 50%, 20%, 0.15);
+      --shadow-glow-primary-sm: 0 0 8px -2px hsla(var(--primary) / 0.3);
+      --shadow-glow-primary-md: 0 0 15px -3px hsla(var(--primary) / 0.4);
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 217 33% 23%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217 33% 20%;
-    --muted-foreground: 215 20% 65%;
-
-    --accent: 221 83% 53%;
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217 33% 23%;
-    --input: 217 33% 23%;
-    --ring: 221 83% 53%;
-
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-
-    --gradient-primary: linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(243 75% 59%) 100%);
-    --gradient-card: linear-gradient(135deg, hsl(217 33% 17%) 0%, hsl(217 33% 20%) 100%);
-    
-    --shadow-card: 0 4px 20px -2px hsl(0 0% 0% / 0.3);
-    --shadow-hover: 0 12px 40px -4px hsl(221 83% 53% / 0.25);
-
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+      --shadow-card: var(--shadow-depth-md);
+      --shadow-hover: var(--shadow-depth-lg), var(--shadow-glow-primary-sm);
+      --shadow-input-inset: inset 0 2px 4px 0 hsla(220, 30%, 50%, 0.06);
   }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    /* Usamos el borde neutral. El /50 lo hace aún más sutil */
+    @apply border-border/50; 
   }
-
   body {
     @apply bg-background text-foreground;
+    @apply transition-colors duration-300;
+    /* --- MEJORA: Tipografía más legible --- */
+    /* antialiased suaviza las fuentes. leading-relaxed da más espacio entre líneas */
+    @apply font-sans antialiased leading-relaxed;
   }
+  a {
+      /* Le damos un text-shadow sutil para que "brille" un poco sobre el fondo */
+      @apply text-[hsl(var(--accent))] hover:brightness-125 transition-all duration-200;
+      text-shadow: 0 0 5px hsla(var(--accent) / 0.3);
+  }
+  /* Scrollbars (Sin cambios, tu diseño era bueno) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 4px;
+    border: 2px solid hsl(var(--background));
+  }
+    ::-webkit-scrollbar-thumb:hover {
+       background-color: hsl(var(--accent));
+    }
+}
+
+
+@layer components {
+  /* --- Card Profesional Refinada --- */
+  .card-pro {
+    /* Aplicamos la nueva sombra de profundidad */
+    box-shadow: var(--shadow-card);
+    /* El borde por defecto es el neutral (border/50) */
+    @apply bg-card border rounded-xl transition-all duration-300 ease-out backdrop-blur-sm bg-opacity-80 dark:bg-opacity-80;
+  }
+  .card-pro:hover {
+    /* En hover, aplicamos la sombra combinada (profundidad + glow) */
+    box-shadow: var(--shadow-hover); 
+    /* El borde cambia a color acento y el 'translate' es más sutil */
+    @apply border-accent/70 transform -translate-y-0.5 ring-1 ring-accent/30;
+  }
+  
+  /* Card Inset (Sin cambios, ya era sutil) */
+  .card-inset-pro {
+     box-shadow: var(--shadow-input-inset);
+     @apply bg-card/60 dark:bg-card/70 rounded-lg border border-border/30;
+  }
+
+  /* --- Botones Refinados --- */
+  .btn-pro {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 px-5 py-2.5
+            bg-gradient-to-r from-primary to-accent text-primary-foreground 
+            /* Sombra más sutil y controlada */
+            shadow-[0_2px_8px_-1px_hsl(var(--primary)/0.3)] 
+            hover:shadow-[0_4px_16px_-2px_hsl(var(--primary)/0.5)] 
+            hover:brightness-110 active:scale-[0.98];
+  }
+  .btn-outline-pro {
+     @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 px-5 py-2.5
+            /* Usamos el borde de acento, que ahora destaca más */
+             border border-accent text-accent bg-transparent 
+             hover:bg-accent/10 
+             /* Usamos nuestra variable de glow específica */
+             hover:shadow-[var(--shadow-glow-primary-sm)] 
+             active:scale-[0.98];
+  }
+   .btn-secondary-pro {
+      @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 px-5 py-2.5
+              bg-secondary text-secondary-foreground hover:bg-secondary/80 hover:text-accent shadow-sm active:scale-[0.98];
+   }
 }
