@@ -3,18 +3,15 @@ import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { ArrowLeft, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Search, X } from "lucide-react";
+import { ArrowLeft, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from "lucide-react";
 
 const ViewData = () => {
   const { filename } = useParams<{ filename: string }>();
   const [data, setData] = useState<any[]>([]);
-  const [filteredData, setFilteredData] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [pagination, setPagination] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>("");
 
   const fetchData = async (page = 1) => {
     setLoading(true);
@@ -27,7 +24,6 @@ const ViewData = () => {
       }
       const result = await response.json();
       setData(result.data);
-      setFilteredData(result.data);
       setHeaders(result.headers);
       setPagination(result.pagination);
     } catch (e: any) {
@@ -47,31 +43,6 @@ const ViewData = () => {
     }
   };
 
-  const handleSearch = () => {
-    if (!searchTerm.trim()) {
-      setFilteredData(data);
-      return;
-    }
-
-    const filtered = data.filter(row => 
-      Object.values(row).some(value => 
-        String(value).toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-    setFilteredData(filtered);
-  };
-
-  const handleClearSearch = () => {
-    setSearchTerm("");
-    setFilteredData(data);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -84,25 +55,11 @@ const ViewData = () => {
 
         <Card>
           <CardHeader>
+            {/* Se eliminó la sección de búsqueda de aquí */}
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Visualizador de Datos</CardTitle>
                 <p className="text-sm text-muted-foreground">Mostrando archivo: <span className="font-mono bg-muted px-2 py-1 rounded">{filename}</span></p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Input
-                  placeholder="Buscar en los datos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  className="w-64"
-                />
-                <Button onClick={handleSearch} size="sm" variant="outline">
-                  <Search className="w-4 h-4" />
-                </Button>
-                <Button onClick={handleClearSearch} size="sm" variant="outline">
-                  <X className="w-4 h-4" />
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -114,11 +71,8 @@ const ViewData = () => {
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-4 py-2 border-b border-border flex items-center justify-between">
                     <div className="text-sm text-muted-foreground">
-                      {filteredData.length !== data.length ? (
-                        <>Mostrando {filteredData.length} de {data.length} filas (filtradas)</>
-                      ) : (
-                        <>Datos del archivo: {filename}</>
-                      )}
+                      {/* Se simplificó este mensaje */}
+                      Datos del archivo: {filename}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {headers.length} columnas
@@ -135,7 +89,8 @@ const ViewData = () => {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredData.map((row, rowIndex) => (
+                          {/* Se cambió 'filteredData' por 'data' */}
+                          {data.map((row, rowIndex) => (
                             <TableRow key={rowIndex}>
                               {headers.map((header) => (
                                 <TableCell key={`${rowIndex}-${header}`} className="whitespace-nowrap min-w-[120px]">
@@ -159,11 +114,7 @@ const ViewData = () => {
                   </div>
                 </div>
 
-                {filteredData.length !== data.length && (
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    Mostrando {filteredData.length} de {data.length} filas (filtradas)
-                  </div>
-                )}
+                {/* Se eliminó el texto condicional de "filas filtradas" */}
 
                 <div className="flex items-center justify-between mt-4">
                   <div className="text-sm text-muted-foreground">
@@ -174,7 +125,7 @@ const ViewData = () => {
                       <ChevronsLeft className="h-4 w-4" />
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => handlePageChange(pagination.current_page - 1)} disabled={pagination.current_page === 1}>
-                       <ChevronLeft className="h-4 h-4" />
+                      <ChevronLeft className="h-4 h-4" />
                     </Button>
                     <span className="text-sm">Página {pagination.current_page} de {pagination.total_pages}</span>
                     <Button variant="outline" size="sm" onClick={() => handlePageChange(pagination.current_page + 1)} disabled={pagination.current_page === pagination.total_pages}>

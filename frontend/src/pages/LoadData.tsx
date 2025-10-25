@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react"; // <-- Se importa useRef
 import { Upload, FileText, ArrowLeft, CheckCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-// Eliminamos la importación de Tabs ya que no se usarán
 import { useToast } from "@/hooks/use-toast";
 
 const LoadData = () => {
@@ -14,23 +13,27 @@ const LoadData = () => {
   const [previewData, setPreviewData] = useState<any[]>([]);
   const { toast } = useToast();
   const navigate = useNavigate();
+  // <-- CAMBIO: Crear una referencia para el input de archivo
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validar que sea CSV aquí para mayor robustez
       if (!file.name.endsWith(".csv") && file.type !== "text/csv") {
         toast({
           title: "Archivo no válido",
           description: "Por favor, selecciona un archivo .csv",
           variant: "destructive",
         });
-        setUploadedFile(null); // Limpiar si no es CSV
-        event.target.value = ''; // Resetear el input file
+        setUploadedFile(null);
+        // <-- CAMBIO: Usar la referencia para limpiar el input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
         return;
       }
       setUploadedFile(file);
-      setPreviewData([]); // Limpiar vista previa al cargar nuevo archivo
+      setPreviewData([]);
 
       toast({
         title: "Archivo seleccionado",
@@ -56,17 +59,19 @@ const LoadData = () => {
         return;
       }
 
-      // Parse CSV header
-      // Manejar posibles errores en la separación por comas o diferentes delimitadores
-      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '')); // Remover comillas
+      // <-- CAMBIO: Regex para CSV (maneja comas dentro de comillas)
+      const csvRegex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
 
-      // Parse first 6 data rows
+      // <-- CAMBIO: Usar el regex para parsear las cabeceras
+      const headers = lines[0].split(csvRegex).map(h => h.trim().replace(/^"|"$/g, ''));
+
+      // Parsear las primeras 6 filas de datos
       const rows = lines.slice(1, 7).map(line => {
-        // Considerar comillas en los valores
-        const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
+        // <-- CAMBIO: Usar el mismo regex para parsear los valores
+        const values = line.split(csvRegex).map(v => v.trim().replace(/^"|"$/g, ''));
         const row: any = {};
         headers.forEach((header, index) => {
-          row[header] = values[index] !== undefined ? values[index] : null; // Asegurar null si falta valor
+          row[header] = values[index] !== undefined ? values[index] : null;
         });
         return row;
       });
@@ -113,7 +118,7 @@ const LoadData = () => {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.detail || result.error || "Error al subir el archivo"); // Usar detail o error
+        throw new Error(result.detail || result.error || "Error al subir el archivo");
       }
 
       toast({
@@ -122,7 +127,6 @@ const LoadData = () => {
       });
 
       localStorage.setItem('uploadedFileName', result.filename);
-      // Limpiar archivo limpiado anterior si existe
       localStorage.removeItem('cleanedFileName');
 
       setTimeout(() => navigate('/clean-data'), 1000);
@@ -149,7 +153,6 @@ const LoadData = () => {
           </Link>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center">
-              {/* Cambiamos el icono a FileText ya que solo manejamos CSV */}
               <FileText className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
@@ -162,7 +165,6 @@ const LoadData = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        {/* Eliminamos la estructura de Tabs */}
         <div className="max-w-4xl mx-auto">
           <Card className="p-8 shadow-card">
             <div className="space-y-6">
@@ -173,7 +175,11 @@ const LoadData = () => {
                 <p className="text-muted-foreground">Selecciona un archivo CSV desde tu computadora</p>
               </div>
 
-              <div className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary transition-colors cursor-pointer bg-muted/10" onClick={() => document.getElementById('file-upload')?.click()}>
+              {/* <-- CAMBIO: Usar la referencia en el onClick */}
+              <div
+                className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary transition-colors cursor-pointer bg-muted/10"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <Label htmlFor="file-upload" className="cursor-pointer">
                   <div className="text-lg font-medium mb-2">
@@ -182,15 +188,14 @@ const LoadData = () => {
                   <div className="text-sm text-muted-foreground mb-4">
                     o haz clic para seleccionar (solo .csv)
                   </div>
-                  {/* Input ahora está oculto pero funcional */}
                   <Input
+                    ref={fileInputRef} // <-- CAMBIO: Asignar la referencia
                     id="file-upload"
                     type="file"
-                    accept=".csv,text/csv" // Ser más específico con accept
+                    accept=".csv,text/csv"
                     className="hidden"
                     onChange={handleFileUpload}
                   />
-                  {/* El botón ahora es decorativo, la acción está en el div padre */}
                   <Button variant="secondary" className="mt-2 pointer-events-none">
                     Seleccionar archivo
                   </Button>
@@ -204,14 +209,14 @@ const LoadData = () => {
                     <p className="font-medium text-success">Archivo listo:</p>
                     <p className="text-muted-foreground break-all">{uploadedFile.name}</p>
                   </div>
-                  {/* Botón para quitar el archivo */}
-                   <Button variant="ghost" size="sm" onClick={() => {
-                       setUploadedFile(null);
-                       setPreviewData([]);
-                       // Resetear el input file para permitir volver a cargar el mismo archivo
-                       const input = document.getElementById('file-upload') as HTMLInputElement;
-                       if(input) input.value = '';
-                       toast({ title: "Archivo deseleccionado"});
+                  <Button variant="ghost" size="sm" onClick={() => {
+                      setUploadedFile(null);
+                      setPreviewData([]);
+                      // <-- CAMBIO: Usar la referencia para resetear
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                      }
+                      toast({ title: "Archivo deseleccionado"});
                     }}>Quitar</Button>
                 </div>
               )}
@@ -221,7 +226,6 @@ const LoadData = () => {
                   <div className="bg-muted/30 px-4 py-2 border-b border-border">
                     <h4 className="font-semibold text-sm text-muted-foreground">Vista previa de datos (primeras {previewData.length} filas)</h4>
                   </div>
-                  {/* ESTE DIV CONTROLA EL SCROLL */}
                   <div className="overflow-x-auto max-h-80">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/50 sticky top-0 z-[1]">
@@ -238,10 +242,10 @@ const LoadData = () => {
                           <tr key={idx} className="border-b border-border last:border-b-0 hover:bg-muted/20">
                             {Object.keys(row).map((key: any, cellIdx) => (
                               <td key={cellIdx} className="px-4 py-2 border-r border-border last:border-r-0 whitespace-nowrap max-w-xs overflow-hidden text-ellipsis" title={row[key]}>
-                                {row[key] === null || row[key] === '' ? ( // Considerar strings vacíos como null visualmente
+                                {row[key] === null || row[key] === '' ? (
                                   <span className="text-muted-foreground italic">null</span>
                                 ) : (
-                                  String(row[key]) // Convertir a string explícitamente
+                                  String(row[key])
                                 )}
                               </td>
                             ))}
