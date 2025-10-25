@@ -9,20 +9,52 @@ from sklearn.preprocessing import LabelEncoder
 
 MODEL_DIR = os.getenv("MODEL_DIR", "./models")
 
+def handle_nulls_for_training(df: pd.DataFrame, feature_cols: list, target_col: str) -> pd.DataFrame:
+    """
+    Maneja valores nulos específicamente para entrenamiento.
+    El backend ignora completamente los nulos durante el entrenamiento.
+    """
+    print(f"Procesando valores nulos para entrenamiento...")
+    
+    # Crear una copia para no modificar el original
+    df_clean = df.copy()
+    
+    # Verificar nulos en features y target
+    null_counts = df_clean[feature_cols + [target_col]].isnull().sum()
+    print(f"Nulos por columna: {null_counts.to_dict()}")
+    
+    # Eliminar filas con cualquier valor nulo en features o target
+    df_clean = df_clean.dropna(subset=feature_cols + [target_col])
+    
+    print(f"Filas después de eliminar nulos: {df_clean.shape[0]}")
+    print(f"Filas eliminadas: {df.shape[0] - df_clean.shape[0]}")
+    
+    return df_clean
+
 def train_model(file_path: str, model_config: dict):
     """Entrena un modelo de clasificación y devuelve métricas detalladas."""
     df = pd.read_csv(file_path)
+    
+    print(f"Dataset original: {df.shape[0]} filas, {df.shape[1]} columnas")
+    print(f"Valores nulos en dataset original: {df.isnull().sum().sum()}")
 
     # --- Preprocesamiento de datos ---
-    feature_cols = [col.strip() for col in model_config['features'].split(',')]
-    target_col = model_config['target'].strip()
+    features = model_config.get('features')
+    if isinstance(features, str):
+        feature_cols = [col.strip().replace(' ', '_') for col in features.split(',')]
+    elif isinstance(features, list):
+        feature_cols = [str(item).strip().replace(' ', '_') for item in features]
+    else:
+        feature_cols = []
+    target_col = model_config['target'].strip().replace(' ', '_')
     
     if not all(col in df.columns for col in feature_cols):
         raise ValueError("Una o más columnas de features no se encontraron en el archivo.")
     if target_col not in df.columns:
         raise ValueError("La columna target no se encontró en el archivo.")
 
-    df = df[feature_cols + [target_col]].dropna()
+    # Usar la función especializada para manejar nulos en entrenamiento
+    df = handle_nulls_for_training(df, feature_cols, target_col)
 
     if df.empty:
         raise ValueError("No hay datos suficientes después de eliminar filas con valores nulos.")
@@ -87,5 +119,11 @@ def train_model(file_path: str, model_config: dict):
             "featureImportance": [{"name": name, "importance": round(imp, 2)} for name, imp in feature_importance]
         },
         "model_type": model_config['modelType'],
-        "model_name": model_name
+        "model_name": model_name,
+        "data_info": {
+            "training_rows": df.shape[0],  # Filas usadas para entrenamiento (sin nulos)
+            "features_used": feature_cols,
+            "target_column": target_col,
+            "nulls_handled": "Eliminadas filas con valores nulos para entrenamiento"
+        }
     }

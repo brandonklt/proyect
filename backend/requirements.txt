@@ -9,3 +9,4 @@ scikit-learn
 torch
 supabase
 joblib
+chardet # <- Added for encoding detection

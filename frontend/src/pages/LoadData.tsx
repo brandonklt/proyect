@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Upload, Database, FileText, ArrowLeft, CheckCircle } from "lucide-react";
+import { Upload, FileText, ArrowLeft, CheckCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Eliminamos la importación de Tabs ya que no se usarán
 import { useToast } from "@/hooks/use-toast";
 
 const LoadData = () => {
@@ -18,11 +18,22 @@ const LoadData = () => {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Validar que sea CSV aquí para mayor robustez
+      if (!file.name.endsWith(".csv") && file.type !== "text/csv") {
+        toast({
+          title: "Archivo no válido",
+          description: "Por favor, selecciona un archivo .csv",
+          variant: "destructive",
+        });
+        setUploadedFile(null); // Limpiar si no es CSV
+        event.target.value = ''; // Resetear el input file
+        return;
+      }
       setUploadedFile(file);
-      setPreviewData([]);
-      
+      setPreviewData([]); // Limpiar vista previa al cargar nuevo archivo
+
       toast({
-        title: "Archivo cargado",
+        title: "Archivo seleccionado",
         description: `${file.name} está listo para procesarse`,
       });
     }
@@ -35,30 +46,46 @@ const LoadData = () => {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       const lines = text.split('\n').filter(line => line.trim());
-      
-      if (lines.length === 0) return;
-      
+
+      if (lines.length === 0) {
+        toast({
+          title: "Archivo vacío",
+          description: "El archivo CSV parece estar vacío.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Parse CSV header
-      const headers = lines[0].split(',').map(h => h.trim());
-      
+      // Manejar posibles errores en la separación por comas o diferentes delimitadores
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '')); // Remover comillas
+
       // Parse first 6 data rows
       const rows = lines.slice(1, 7).map(line => {
-        const values = line.split(',').map(v => v.trim());
+        // Considerar comillas en los valores
+        const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
         const row: any = {};
         headers.forEach((header, index) => {
-          row[header] = values[index] || null;
+          row[header] = values[index] !== undefined ? values[index] : null; // Asegurar null si falta valor
         });
         return row;
       });
-      
+
       setPreviewData(rows);
-      
+
       toast({
         title: "Vista previa generada",
-        description: `Mostrando ${rows.length} filas de ${lines.length - 1} totales`,
+        description: `Mostrando ${rows.length} filas de ${lines.length - 1} totales (aproximado)`,
       });
     };
-    
+    reader.onerror = () => {
+        toast({
+            title: "Error al leer archivo",
+            description: "No se pudo leer el contenido del archivo.",
+            variant: "destructive",
+          });
+    }
+
     reader.readAsText(uploadedFile);
   };
 
@@ -66,7 +93,7 @@ const LoadData = () => {
     if (!uploadedFile) {
       toast({
         title: "Error",
-        description: "Por favor carga un archivo primero",
+        description: "Por favor carga un archivo CSV primero",
         variant: "destructive",
       });
       return;
@@ -86,16 +113,17 @@ const LoadData = () => {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Error al subir el archivo");
+        throw new Error(result.detail || result.error || "Error al subir el archivo"); // Usar detail o error
       }
 
       toast({
         title: "Archivo subido exitosamente",
-        description: `${result.filename} ha sido subido y está listo para el entrenamiento.`,
+        description: `${result.filename} ha sido subido. Redirigiendo a limpieza...`,
       });
 
-      // Guardar información relevante para el siguiente paso si es necesario
       localStorage.setItem('uploadedFileName', result.filename);
+      // Limpiar archivo limpiado anterior si existe
+      localStorage.removeItem('cleanedFileName');
 
       setTimeout(() => navigate('/clean-data'), 1000);
 
@@ -113,7 +141,7 @@ const LoadData = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm">
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-6 py-4">
           <Link to="/" className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors mb-4">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -121,11 +149,12 @@ const LoadData = () => {
           </Link>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-gradient-primary flex items-center justify-center">
-              <Database className="w-6 h-6 text-primary-foreground" />
+              {/* Cambiamos el icono a FileText ya que solo manejamos CSV */}
+              <FileText className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Cargar Datos</h1>
-              <p className="text-muted-foreground">Importa archivos CSV o conecta a bases de datos externas</p>
+              <h1 className="text-3xl font-bold text-foreground">Cargar Datos CSV</h1>
+              <p className="text-muted-foreground">Importa archivos CSV para análisis</p>
             </div>
           </div>
         </div>
@@ -133,169 +162,113 @@ const LoadData = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
-        <Tabs defaultValue="csv" className="max-w-4xl mx-auto">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="csv" className="gap-2">
-              <FileText className="w-4 h-4" />
-              Archivo CSV
-            </TabsTrigger>
-            <TabsTrigger value="database" className="gap-2">
-              <Database className="w-4 h-4" />
-              Base de Datos
-            </TabsTrigger>
-          </TabsList>
+        {/* Eliminamos la estructura de Tabs */}
+        <div className="max-w-4xl mx-auto">
+          <Card className="p-8 shadow-card">
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-primary"/> Importar archivo CSV
+                </h3>
+                <p className="text-muted-foreground">Selecciona un archivo CSV desde tu computadora</p>
+              </div>
 
-          <TabsContent value="csv">
-            <Card className="p-8 shadow-card">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">Importar archivo CSV</h3>
-                  <p className="text-muted-foreground">Selecciona un archivo CSV desde tu computadora</p>
-                </div>
-
-                <div className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary transition-colors">
-                  <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <Label htmlFor="file-upload" className="cursor-pointer">
-                    <div className="text-lg font-medium mb-2">
-                      {uploadedFile ? uploadedFile.name : "Arrastra tu archivo aquí"}
-                    </div>
-                    <div className="text-sm text-muted-foreground mb-4">
-                      o haz clic para seleccionar
-                    </div>
-                    <Input
-                      id="file-upload"
-                      type="file"
-                      accept=".csv"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                    <Button variant="secondary" className="mt-2">
-                      Seleccionar archivo
-                    </Button>
-                  </Label>
-                </div>
-
-                {uploadedFile && (
-                  <div className="bg-success/10 border border-success/20 rounded-lg p-4 flex items-center gap-3">
-                    <CheckCircle className="w-5 h-5 text-success" />
-                    <div className="flex-1">
-                      <p className="font-medium text-success">Archivo cargado exitosamente</p>
-                      <p className="text-sm text-muted-foreground">{uploadedFile.name}</p>
-                    </div>
+              <div className="border-2 border-dashed border-border rounded-xl p-12 text-center hover:border-primary transition-colors cursor-pointer bg-muted/10" onClick={() => document.getElementById('file-upload')?.click()}>
+                <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <Label htmlFor="file-upload" className="cursor-pointer">
+                  <div className="text-lg font-medium mb-2">
+                    {uploadedFile ? uploadedFile.name : "Arrastra tu archivo CSV aquí"}
                   </div>
-                )}
+                  <div className="text-sm text-muted-foreground mb-4">
+                    o haz clic para seleccionar (solo .csv)
+                  </div>
+                  {/* Input ahora está oculto pero funcional */}
+                  <Input
+                    id="file-upload"
+                    type="file"
+                    accept=".csv,text/csv" // Ser más específico con accept
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  {/* El botón ahora es decorativo, la acción está en el div padre */}
+                  <Button variant="secondary" className="mt-2 pointer-events-none">
+                    Seleccionar archivo
+                  </Button>
+                </Label>
+              </div>
 
-                {previewData.length > 0 && (
-                  <div className="border border-border rounded-lg overflow-hidden">
-                    <div className="bg-muted/50 px-4 py-2 border-b border-border">
-                      <h4 className="font-semibold text-sm">Vista previa de datos (6 filas)</h4>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/30">
-                          <tr>
-                            {Object.keys(previewData[0]).map((key) => (
-                              <th key={key} className="px-4 py-2 text-left font-medium text-muted-foreground border-b border-border">
-                                {key}
-                              </th>
+              {uploadedFile && (
+                <div className="bg-success/10 border border-success/20 rounded-lg p-4 flex items-center gap-3 text-sm">
+                  <CheckCircle className="w-5 h-5 text-success shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-medium text-success">Archivo listo:</p>
+                    <p className="text-muted-foreground break-all">{uploadedFile.name}</p>
+                  </div>
+                  {/* Botón para quitar el archivo */}
+                   <Button variant="ghost" size="sm" onClick={() => {
+                       setUploadedFile(null);
+                       setPreviewData([]);
+                       // Resetear el input file para permitir volver a cargar el mismo archivo
+                       const input = document.getElementById('file-upload') as HTMLInputElement;
+                       if(input) input.value = '';
+                       toast({ title: "Archivo deseleccionado"});
+                    }}>Quitar</Button>
+                </div>
+              )}
+
+              {previewData.length > 0 && (
+                <div className="border border-border rounded-lg overflow-hidden mt-6 animate-in fade-in duration-300">
+                  <div className="bg-muted/30 px-4 py-2 border-b border-border">
+                    <h4 className="font-semibold text-sm text-muted-foreground">Vista previa de datos (primeras {previewData.length} filas)</h4>
+                  </div>
+                  {/* ESTE DIV CONTROLA EL SCROLL */}
+                  <div className="overflow-x-auto max-h-80">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 sticky top-0 z-[1]">
+                        <tr>
+                          {Object.keys(previewData[0]).map((key) => (
+                            <th key={key} className="px-4 py-2 text-left font-medium text-muted-foreground border-b border-r border-border last:border-r-0 whitespace-nowrap">
+                              {key}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewData.map((row, idx) => (
+                          <tr key={idx} className="border-b border-border last:border-b-0 hover:bg-muted/20">
+                            {Object.keys(row).map((key: any, cellIdx) => (
+                              <td key={cellIdx} className="px-4 py-2 border-r border-border last:border-r-0 whitespace-nowrap max-w-xs overflow-hidden text-ellipsis" title={row[key]}>
+                                {row[key] === null || row[key] === '' ? ( // Considerar strings vacíos como null visualmente
+                                  <span className="text-muted-foreground italic">null</span>
+                                ) : (
+                                  String(row[key]) // Convertir a string explícitamente
+                                )}
+                              </td>
                             ))}
                           </tr>
-                        </thead>
-                        <tbody>
-                          {previewData.map((row, idx) => (
-                            <tr key={idx} className="border-b border-border hover:bg-muted/20">
-                              {Object.values(row).map((value: any, cellIdx) => (
-                                <td key={cellIdx} className="px-4 py-2">
-                                  {value === null ? (
-                                    <span className="text-warning italic">null</span>
-                                  ) : (
-                                    value
-                                  )}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <Button 
-                    className="flex-1" 
-                    onClick={handleProcessData}
-                    disabled={!uploadedFile || isProcessing}
-                  >
-                    {isProcessing ? "Procesando..." : "Procesar datos"}
-                  </Button>
-                  <Button variant="outline" disabled={!uploadedFile} onClick={handlePreview}>Vista previa</Button>
                 </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border mt-6">
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={handleProcessData}
+                  disabled={!uploadedFile || isProcessing}
+                >
+                  <FileText className="w-4 h-4"/>
+                  {isProcessing ? "Procesando..." : "Procesar y Continuar"}
+                </Button>
+                <Button variant="outline" disabled={!uploadedFile || isProcessing} onClick={handlePreview}>
+                  Vista previa
+                </Button>
               </div>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="database">
-            <Card className="p-8 shadow-card">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-semibold mb-2">Conexión a base de datos</h3>
-                  <p className="text-muted-foreground">Configura la conexión a tu base de datos externa</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="db-type">Tipo de base de datos</Label>
-                    <select
-                      id="db-type"
-                      className="w-full mt-2 px-4 py-2 rounded-lg border border-input bg-background"
-                    >
-                      <option>PostgreSQL</option>
-                      <option>MySQL</option>
-                      <option>MongoDB</option>
-                      <option>SQLite</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="host">Host</Label>
-                    <Input id="host" placeholder="localhost:5432" className="mt-2" />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="username">Usuario</Label>
-                      <Input id="username" placeholder="admin" className="mt-2" />
-                    </div>
-                    <div>
-                      <Label htmlFor="password">Contraseña</Label>
-                      <Input id="password" type="password" placeholder="••••••••" className="mt-2" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="database">Nombre de la base de datos</Label>
-                    <Input id="database" placeholder="ml_data" className="mt-2" />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="query">Query SQL (opcional)</Label>
-                    <textarea
-                      id="query"
-                      placeholder="SELECT * FROM dataset WHERE..."
-                      className="w-full mt-2 px-4 py-2 rounded-lg border border-input bg-background min-h-[100px]"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button className="flex-1">Conectar y cargar</Button>
-                  <Button variant="outline">Probar conexión</Button>
-                </div>
-              </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            </div>
+          </Card>
+        </div>
       </main>
     </div>
   );

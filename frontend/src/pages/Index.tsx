@@ -1,8 +1,29 @@
+import { useEffect } from "react";
 import { Database, FileSpreadsheet, Brain, BarChart3 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { api } from "@/lib/api"; // Asegúrate de que la ruta sea correcta
 
 const Index = () => {
+  useEffect(() => {
+    const resetSession = async () => {
+      try {
+        await api.post("/reset");
+        console.log("Sesión reiniciada exitosamente.");
+        
+        // Limpiar almacenamiento local y de sesión
+        localStorage.clear();
+        sessionStorage.clear();
+        console.log("Almacenamiento local y de sesión limpiado.");
+
+      } catch (error) {
+        console.error("Error al reiniciar la sesión:", error);
+      }
+    };
+
+    resetSession();
+  }, []);
+
   const modules = [
     {
       id: "load",
