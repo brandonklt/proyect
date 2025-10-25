@@ -8,6 +8,7 @@ import {
   BrainCircuit,
   LayoutGrid,
   Upload,
+  Info,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -23,6 +24,7 @@ import {
   Tooltip,
   Legend,
   BarChart as RechartsBarChart,
+  Cell,
 } from "recharts";
 
 const Results = () => {
@@ -185,58 +187,143 @@ const Results = () => {
                 </TabsList>
                 <TabsContent value="confusion-matrix">
                   <div className="flex justify-center mt-4">
-                    <div className="grid grid-cols-2 gap-2 text-center w-64">
-                      <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-500/50">
-                        <p className="text-sm text-muted-foreground">
+                    <div className="grid grid-cols-2 gap-2 text-center w-100">
+                      <div className="p-8 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-500/50">
+                        <p className="text-sm text-green-900 dark:text-green-100">
                           Verdaderos Positivos
                         </p>
-                        <p className="text-2xl font-bold">
+                        <p className="text-2xl font-bold text-green-900 dark:text-green-100">
                           {confusionMatrix[1][1]}
                         </p>
                       </div>
-                      <div className="p-4 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-500/50">
-                        <p className="text-sm text-muted-foreground">
+                      <div className="p-8 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-500/50">
+                        <p className="text-sm text-red-900 dark:text-red-100">
                           Falsos Positivos
                         </p>
-                        <p className="text-2xl font-bold">
+                        <p className="text-2xl font-bold text-red-900 dark:text-red-100">
                           {confusionMatrix[0][1]}
                         </p>
                       </div>
-                      <div className="p-4 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-500/50">
-                        <p className="text-sm text-muted-foreground">
+                      <div className="p-8 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg border border-yellow-500/50">
+                        <p className="text-sm text-yellow-900 dark:text-yellow-100">
                           Falsos Negativos
                         </p>
-                        <p className="text-2xl font-bold">
+                        <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">
                           {confusionMatrix[1][0]}
                         </p>
                       </div>
-                      <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-500/50">
-                        <p className="text-sm text-muted-foreground">
+                      <div className="p-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg border border-blue-500/50">
+                        <p className="text-sm text-blue-900 dark:text-blue-100">
                           Verdaderos Negativos
                         </p>
-                        <p className="text-2xl font-bold">
+                        <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                           {confusionMatrix[0][0]}
                         </p>
                       </div>
                     </div>
                   </div>
                 </TabsContent>
-                <TabsContent value="feature-importance">
-                  <div style={{ width: "100%", height: 300 }}>
-                    <ResponsiveContainer>
-                      <RechartsBarChart
-                        data={featureImportance}
-                        layout="vertical"
-                        margin={{ top: 5, right: 20, left: 50, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" />
-                        <YAxis dataKey="feature" type="category" width={80} />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="importance" fill="#8884d8" />
-                      </RechartsBarChart>
-                    </ResponsiveContainer>
+                <TabsContent value="feature-importance" className="mt-4">
+                  <div className="h-[500px] flex flex-col">
+                    <div className="mb-4 text-center">
+                      <h3 className="text-lg font-semibold">Importancia de Características</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Las características más importantes para las predicciones del modelo
+                      </p>
+                    </div>
+
+                    <div className="flex-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RechartsBarChart
+                          data={featureImportance}
+                          layout="vertical"
+                          margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+                          barCategoryGap={12}
+                        >
+                          <defs>
+                            <linearGradient id="importanceGradient" x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="0%" stopColor="#4f46e5" />
+                              <stop offset="100%" stopColor="#7c3aed" />
+                            </linearGradient>
+                          </defs>
+
+                          <CartesianGrid
+                            horizontal={false}
+                            strokeDasharray="3 3"
+                            stroke="hsl(var(--border))"
+                          />
+
+                          <XAxis
+                            type="number"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                            tickFormatter={(value) => `${value}%`}
+                          />
+
+                          <YAxis
+                            dataKey="name"
+                            type="category"
+                            width={180}
+                            tick={{
+                              fontSize: 13,
+                              fill: 'hsl(var(--foreground))',
+                              fontWeight: 500
+                            }}
+                            tickLine={false}
+                            axisLine={false}
+                            interval={0}
+                          />
+
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--background))',
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '0.5rem',
+                              padding: '0.75rem',
+                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                            }}
+                            formatter={(value: number) => [
+                              `${value.toFixed(2)}% de importancia`,
+                              'Valor'
+                            ]}
+                            labelFormatter={(label) => `Característica: ${label}`}
+                          />
+
+                          <Bar
+                            dataKey="importance"
+                            name="Importancia"
+                            radius={[0, 4, 4, 0]}
+                            fill="url(#importanceGradient)"
+                            animationDuration={1500}
+                          >
+                            {featureImportance?.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={`hsl(${220 + (index * 30)}, 70%, 60%)`}
+                              />
+                            ))}
+                          </Bar>
+                        </RechartsBarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+                      <h4 className="text-sm font-medium mb-2 flex items-center">
+                        <Info className="w-4 h-4 mr-2" />
+                        Cómo interpretar este gráfico
+                      </h4>
+                      <ul className="text-xs text-muted-foreground space-y-1">
+                        <li className="flex items-start">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1.5 mr-2 flex-shrink-0"></span>
+                          <span>Las barras más largas indican características más importantes para el modelo</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary/70 mt-1.5 mr-2 flex-shrink-0"></span>
+                          <span>Pasa el cursor sobre las barras para ver los valores exactos</span>
+                        </li>
+                      </ul>
+                    </div>
                   </div>
                 </TabsContent>
               </Tabs>
