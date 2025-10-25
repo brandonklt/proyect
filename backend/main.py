@@ -11,7 +11,13 @@ import math
 from scipy import stats
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from dotenv import load_dotenv
-from database import supabase
+try:
+    from database import supabase
+    SUPABASE_AVAILABLE = True
+except Exception as e:
+    print(f"Supabase no disponible: {e}")
+    SUPABASE_AVAILABLE = False
+    supabase = None
 from training import train_model
 
 load_dotenv()
@@ -43,12 +49,16 @@ async def upload_csv(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # Registrar subida en Supabase
-    supabase.table("training_jobs").insert({
-        "filename": filename,
-        "status": "uploaded",
-        "created_at": datetime.utcnow().isoformat(),
-    }).execute()
+    # Registrar subida en Supabase (si está disponible)
+    if SUPABASE_AVAILABLE and supabase:
+        try:
+            supabase.table("training_jobs").insert({
+                "filename": filename,
+                "status": "uploaded",
+                "created_at": datetime.utcnow().isoformat(),
+            }).execute()
+        except Exception as e:
+            print(f"Error al registrar en Supabase: {e}")
 
     return {"message": "Archivo subido correctamente", "filename": filename}
 
@@ -237,19 +247,29 @@ def train_model_route(
     try:
         result = train_model(file_path, model_config)
         
-        supabase.table("training_jobs").update({
-            "status": "trained",
-            "model_type": modelType,
-            "metrics": result.get("metrics"),
-            "model_name": result.get("model_name")
-        }).eq("filename", filename).execute()
+        # Actualizar estado en Supabase (si está disponible)
+        if SUPABASE_AVAILABLE and supabase:
+            try:
+                supabase.table("training_jobs").update({
+                    "status": "trained",
+                    "model_type": modelType,
+                    "metrics": result.get("metrics"),
+                    "model_name": result.get("model_name")
+                }).eq("filename", filename).execute()
+            except Exception as e:
+                print(f"Error al actualizar Supabase: {e}")
 
         return {"message": "Entrenamiento completado", "result": result}
     except Exception as e:
-        supabase.table("training_jobs").update({
-            "status": "error",
-            "error_message": str(e)
-        }).eq("filename", filename).execute()
+        # Actualizar estado de error en Supabase (si está disponible)
+        if SUPABASE_AVAILABLE and supabase:
+            try:
+                supabase.table("training_jobs").update({
+                    "status": "error",
+                    "error_message": str(e)
+                }).eq("filename", filename).execute()
+            except Exception as db_error:
+                print(f"Error al actualizar estado de error en Supabase: {db_error}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class ModelResults(BaseModel):
@@ -290,7 +310,12 @@ async def export_to_db(results: ModelResults):
             }
         }
         
-        supabase.table("model_results").insert(db_record).execute()
+        # Insertar en Supabase (si está disponible)
+        if SUPABASE_AVAILABLE and supabase:
+            try:
+                supabase.table("model_results").insert(db_record).execute()
+            except Exception as e:
+                print(f"Error al insertar resultados en Supabase: {e}")
         
         return {"message": "Resultados exportados a la base de datos correctamente."}
     except Exception as e:
