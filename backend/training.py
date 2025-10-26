@@ -6,8 +6,21 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.preprocessing import LabelEncoder
+from typing import Any
 
 MODEL_DIR = os.getenv("MODEL_DIR", "./models")
+
+def clean_record_for_json(data: Any) -> Any:
+    """Recursively traverses a data structure to convert non-JSON compliant values to None."""
+    if isinstance(data, dict):
+        return {key: clean_record_for_json(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [clean_record_for_json(element) for element in data]
+    if isinstance(data, (float, np.floating)) and not np.isfinite(data):
+        return None
+    if pd.isna(data):
+        return None
+    return data
 
 def handle_nulls_for_training(df: pd.DataFrame, feature_cols: list, target_col: str) -> pd.DataFrame:
     """
@@ -110,15 +123,20 @@ def train_model(file_path: str, model_config: dict):
     model_name = os.path.basename(file_path).replace(".csv", f"_{model_config['modelType']}.pkl")
     joblib.dump(model, os.path.join(MODEL_DIR, model_name))
 
+    metrics_dict = {
+        "accuracy": round(accuracy, 2),
+        "precision": round(precision, 2),
+        "recall": round(recall, 2),
+        "f1Score": round(f1, 2),
+        "confusionMatrix": cm,
+        "featureImportance": [{"name": name, "importance": round(imp, 2)} for name, imp in feature_importance]
+    }
+
+    # Limpiar el diccionario de métricas antes de devolverlo
+    clean_metrics = clean_record_for_json(metrics_dict)
+
     return {
-        "metrics": {
-            "accuracy": round(accuracy, 2),
-            "precision": round(precision, 2),
-            "recall": round(recall, 2),
-            "f1Score": round(f1, 2),
-            "confusionMatrix": cm,
-            "featureImportance": [{"name": name, "importance": round(imp, 2)} for name, imp in feature_importance]
-        },
+        "metrics": clean_metrics,
         "model_type": model_config['modelType'],
         "model_name": model_name,
         "data_info": {

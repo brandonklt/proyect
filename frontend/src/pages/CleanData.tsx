@@ -7,7 +7,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const CleanData = () => {
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
+  const [currentFileId, setCurrentFileId] = useState<number | null>(null);
   const [dataStats, setDataStats] = useState({
     rows: 0,
     columns: 0,
@@ -25,13 +26,20 @@ const CleanData = () => {
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [filteredData, setFilteredData] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const cleanedFile = localStorage.getItem("cleanedFileName");
     const uploadedFile = localStorage.getItem("uploadedFileName");
     const fileName = cleanedFile || uploadedFile;
     setCurrentFileName(fileName);
+
+    const uploadedFileId = localStorage.getItem("uploadedFileId");
+    if (uploadedFileId) {
+      setCurrentFileId(parseInt(uploadedFileId, 10));
+    }
 
     const fetchCsvInfo = async () => {
       if (!fileName) return;
@@ -81,6 +89,33 @@ const CleanData = () => {
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleSearch();
+  };
+
+  const handleProcessAndTrain = async () => {
+    if (!currentFileId) {
+      toast({ title: "Error", description: "No se encontró el ID del archivo para procesar.", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const response = await fetch("http://127.0.0.1:8000/clean-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivo_id: currentFileId, operations: [] }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || "Error al procesar y subir los datos.");
+      }
+      toast({ title: "Éxito", description: result.message });
+      localStorage.setItem('cleanedFileName', result.cleaned_filename);
+      localStorage.setItem('datosProcesadosId', result.datos_procesados_id);
+      navigate("/train-models");
+    } catch (error: any) {
+      toast({ title: "Error en el proceso", description: error.message, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -170,7 +205,10 @@ const CleanData = () => {
               </div>
               <div className="flex gap-3">
                 <Link to={`/view-data/${currentFileName}`}><Button variant="secondary" className="gap-2"><Eye className="w-4 h-4" />Visualizar</Button></Link>
-                <Link to="/train-models"><Button className="gap-2"><Brain className="w-4 h-4" />Entrenar Modelos</Button></Link>
+                <Button onClick={handleProcessAndTrain} disabled={isProcessing} className="gap-2">
+                  <Brain className="w-4 h-4" />
+                  {isProcessing ? "Procesando y Subiendo..." : "Entrenar Modelos"}
+                </Button>
               </div>
             </div>
           )}
@@ -181,5 +219,4 @@ const CleanData = () => {
 };
 
 export default CleanData;
-
 

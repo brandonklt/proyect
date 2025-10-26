@@ -127,6 +127,7 @@ const LoadData = () => {
       });
 
       localStorage.setItem('uploadedFileName', result.filename);
+      localStorage.setItem('uploadedFileId', result.archivo_id);
       localStorage.removeItem('cleanedFileName');
 
       setTimeout(() => navigate('/clean-data'), 1000);

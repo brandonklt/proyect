@@ -93,9 +93,12 @@ const TrainModels = () => {
       setTrainingStatus("Procesando resultados...");
       setProgress(100);
 
+      const datosProcesadosId = localStorage.getItem('datosProcesadosId');
+
       const finalResults = {
         ...backendResult.result.metrics,
         modelType: backendResult.result.model_type,
+        datos_procesados_id: datosProcesadosId ? parseInt(datosProcesadosId, 10) : null,
         testSize,
         randomState,
         nEstimators,
