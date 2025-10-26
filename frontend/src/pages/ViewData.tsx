@@ -204,11 +204,8 @@ const ViewData = () => {
         setProcessedData(processed);
         setProcessedHeaders(cleanedHeaders);
 
-        // 5. Setup the "Discarded Rows" table
-        const discardedDisplayHeaders = [...stringColumns];
-        if (!discardedDisplayHeaders.includes('Transaction_ID') && cleanedHeaders.includes('Transaction_ID')) {
-            discardedDisplayHeaders.unshift('Transaction_ID');
-        }
+        // 5. Setup the "Discarded Rows" table - Mostrar TODAS las columnas
+        const discardedDisplayHeaders = [...cleanedHeaders]; // Usar todas las columnas
 
         const rejectedRowsForDisplay = rejectedRows.map((row: any) => {
             const newRow: any = {};
