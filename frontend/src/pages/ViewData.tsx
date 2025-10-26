@@ -2,10 +2,31 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Search, X } from "lucide-react";
 
-// Reusable DataTable Component
+// Reusable DataTable Component with Search
 const DataTable = ({ title, data, headers }: { title: string, data: any[], headers: string[] }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  // Filtrar datos basado en el término de búsqueda
+  const filteredData = data.filter(row => {
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    
+    // Buscar en todos los campos de la fila, especialmente en ID
+    return Object.values(row).some(value => 
+      String(value || '').toLowerCase().includes(searchLower)
+    );
+  });
+
+  const clearSearch = () => {
+    setSearchTerm("");
+  };
+
   if (!data || data.length === 0) {
     return (
       <Card>
@@ -24,9 +45,40 @@ const DataTable = ({ title, data, headers }: { title: string, data: any[], heade
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {/* Barra de búsqueda compacta */}
+        <div className="flex items-center justify-end gap-2">
+          <div className="relative w-64">
+            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground h-3.5 w-3.5" />
+            <Input
+              placeholder="Buscar por ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-3 h-9 text-sm"
+            />
+          </div>
+          {searchTerm && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearSearch}
+              className="flex-shrink-0 h-9"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              <span className="text-xs">Limpiar</span>
+            </Button>
+          )}
+        </div>
+        
+        {/* Contador de resultados */}
+        {searchTerm && (
+          <p className="text-sm text-muted-foreground">
+            Mostrando {filteredData.length} de {data.length} registros
+          </p>
+        )}
+        
         <div className="border rounded-lg overflow-hidden">
-          <div className="overflow-x-auto max-h-[600px]">
+          <div className="overflow-x-auto max-h-[550px]">
             <Table>
               <TableHeader className="sticky top-0 bg-background">
                 <TableRow>
@@ -36,19 +88,27 @@ const DataTable = ({ title, data, headers }: { title: string, data: any[], heade
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.map((row, rowIndex) => (
-                  <TableRow key={rowIndex}>
-                    {headers.map((header) => (
-                      <TableCell key={`${rowIndex}-${header}`} className="whitespace-nowrap">
-                        {row[header] === null ? (
-                          <span className="text-pink-500 italic">null</span>
-                        ) : (
-                          String(row[header])
-                        )}
-                      </TableCell>
-                    ))}
+                {filteredData.length === 0 && searchTerm ? (
+                  <TableRow>
+                    <TableCell colSpan={headers.length} className="text-center text-muted-foreground py-8">
+                      No se encontraron resultados para "{searchTerm}"
+                    </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredData.map((row, rowIndex) => (
+                    <TableRow key={rowIndex}>
+                      {headers.map((header) => (
+                        <TableCell key={`${rowIndex}-${header}`} className="whitespace-nowrap">
+                          {row[header] === null || row[header] === undefined ? (
+                            <span className="text-pink-500 italic">null</span>
+                          ) : (
+                            String(row[header])
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
@@ -182,15 +242,38 @@ const ViewData = () => {
           </Link>
         </div>
 
-        {loading && <p>Cargando y procesando datos...</p>}
-        {error && <p className="text-destructive">Error: {error}</p>}
+        {loading && (
+          <div className="flex items-center justify-center p-8">
+            <p className="text-muted-foreground">Cargando y procesando datos...</p>
+          </div>
+        )}
+        
+        {error && (
+          <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <p className="text-destructive">Error: {error}</p>
+          </div>
+        )}
         
         {!loading && !error && (
-          <div className="space-y-8">
-            <DataTable title="Datos Crudos (Original)" data={rawData} headers={rawHeaders} />
-            <DataTable title="Datos Procesados" data={processedData} headers={processedHeaders} />
-            <DataTable title="Filas con Nulos de Texto (Descartadas)" data={discardedRows} headers={discardedHeaders} />
-          </div>
+          <Tabs defaultValue="raw" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="raw" className="text-sm">📊 Datos Crudos</TabsTrigger>
+              <TabsTrigger value="processed" className="text-sm">✨ Datos Procesados</TabsTrigger>
+              <TabsTrigger value="discarded" className="text-sm">🗑️ Filas Descartadas</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="raw" className="mt-4">
+              <DataTable title="Datos Crudos (Original)" data={rawData} headers={rawHeaders} />
+            </TabsContent>
+            
+            <TabsContent value="processed" className="mt-4">
+              <DataTable title="Datos Procesados" data={processedData} headers={processedHeaders} />
+            </TabsContent>
+            
+            <TabsContent value="discarded" className="mt-4">
+              <DataTable title="Filas con Nulos de Texto (Descartadas)" data={discardedRows} headers={discardedHeaders} />
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </div>
