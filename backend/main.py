@@ -91,41 +91,134 @@ def read_csv_robust(file_path: str) -> pd.DataFrame:
 def safe_to_json(df_slice: pd.DataFrame) -> List[Dict[str, Any]]:
     if df_slice.empty: return []
     df_copy = df_slice.copy()
+    # Handle datetime objects first
     for col in df_copy.columns:
         if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
             if df_copy[col].dt.tz is not None:
                 df_copy[col] = df_copy[col].dt.tz_convert('UTC').dt.tz_localize(None)
             df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%dT%H:%M:%SZ').replace({pd.NaT: None})
-    df_copy = df_copy.replace([np.inf, -np.inf], np.nan)
-    return df_copy.where(pd.notna(df_copy), None).to_dict(orient='records')
+    
+    # Convert to records and then clean each one
+    records = df_copy.to_dict(orient='records')
+    clean_records = [clean_record_for_json(rec) for rec in records]
+    return clean_records
 
 # --- Modelos Pydantic (Completos) ---
-class FileUploadResponse(BaseModel): message: str; filename: str
-class CsvInfoStats(BaseModel): rows: int; columns: int; nullValues: int; duplicates: int
-class CsvInfoResponse(BaseModel): stats: CsvInfoStats; preview_data: List[Dict[str, Any]]; headers: List[str]
-class CleanDataRequest(BaseModel): filename: str; operations: List[str]
-class CleanDataResponse(BaseModel): message: str; cleaned_filename: str; cleaned_stats: CsvInfoStats; preview_data: List[Dict[str, Any]]; headers: List[str]
-class ViewDataPagination(BaseModel): total_rows: int; total_pages: int; current_page: int; page_size: int
-class ViewDataResponse(BaseModel): pagination: ViewDataPagination; data: List[Dict[str, Any]]; headers: List[str]
-class TrainingMetrics(BaseModel): accuracy: Optional[float]=None; precision: Optional[float]=None; recall: Optional[float]=None; f1Score: Optional[float]=None; confusionMatrix: Optional[List[List[int]]]=None; featureImportance: Optional[List[Dict[str, Any]]]=None
-class TrainingResult(BaseModel): metrics: TrainingMetrics; model_type: str; model_name: Optional[str]=None
-class TrainModelResponse(BaseModel): message: str; result: TrainingResult
-class ModelResultsExport(BaseModel): modelType: str; model_name: Optional[str]=None; accuracy: float; precision: float; recall: float; f1Score: float; confusionMatrix: List[List[int]]; featureImportance: List[Dict[str, Any]]; testSize: int; randomState: int; nEstimators: int; maxDepth: Optional[int]=None; features: str; target: str; timestamp: Optional[str]=None
-class SimpleMessageResponse(BaseModel): message: str
+class FileUploadResponse(BaseModel):
+    message: str
+    filename: str
+    archivo_id: int
+
+class CsvInfoStats(BaseModel):
+    rows: int
+    columns: int
+    nullValues: int
+    duplicates: int
+
+class CsvInfoResponse(BaseModel):
+    stats: CsvInfoStats
+    preview_data: List[Dict[str, Any]]
+    headers: List[str]
+
+class CleanDataRequest(BaseModel):
+    archivo_id: int
+    operations: List[str]
+
+class CleanDataResponse(BaseModel):
+    message: str
+    cleaned_filename: str
+    cleaned_stats: CsvInfoStats
+    preview_data: List[Dict[str, Any]]
+    headers: List[str]
+    datos_procesados_id: int
+
+class ViewDataPagination(BaseModel):
+    total_rows: int
+    total_pages: int
+    current_page: int
+    page_size: int
+
+class ViewDataResponse(BaseModel):
+    pagination: ViewDataPagination
+    data: List[Dict[str, Any]]
+    headers: List[str]
+
+class TrainingMetrics(BaseModel):
+    accuracy: Optional[float] = None
+    precision: Optional[float] = None
+    recall: Optional[float] = None
+    f1Score: Optional[float] = None
+    confusionMatrix: Optional[List[List[int]]] = None
+    featureImportance: Optional[List[Dict[str, Any]]] = None
+
+class TrainingResult(BaseModel):
+    metrics: TrainingMetrics
+    model_type: str
+    model_name: Optional[str] = None
+
+class TrainModelResponse(BaseModel):
+    message: str
+    result: TrainingResult
+
+class ModelResultsExport(BaseModel):
+    datos_procesados_id: int  # ID de los datos procesados utilizados
+    modelType: str
+    model_name: Optional[str] = None
+    accuracy: float
+    precision: float
+    recall: float
+    f1Score: float
+    confusionMatrix: List[List[int]]
+    featureImportance: List[Dict[str, Any]]
+    testSize: int
+    randomState: int
+    nEstimators: int
+    maxDepth: Optional[int] = None
+    features: str
+    target: str
+    timestamp: Optional[str] = None
+
+class SimpleMessageResponse(BaseModel):
+    message: str
 
 # --- Endpoints API (Completos) ---
 @app.post("/upload-csv", response_model=FileUploadResponse, tags=["Data Loading"])
 async def upload_csv_endpoint(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Tipo de archivo inválido.")
+    
     filename = generate_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, filename)
+    
     try:
-        with open(file_path, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
-        read_csv_robust(file_path)
-        return {"message": "Archivo subido y validado.", "filename": filename}
+        # Guardar archivo localmente
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Leer el contenido para guardarlo en la base de datos
+        df = read_csv_robust(file_path)
+        file_content = df.to_json(orient='records')
+
+        # Insertar en la tabla archivos_originales y obtener el ID
+        response = supabase.table('archivos_originales').insert({
+            'filename': filename,
+            'file_content': file_content
+        }).execute()
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Error al guardar el archivo en la base de datos.")
+
+        archivo_id = response.data[0]['id']
+
+        return {"message": "Archivo subido y validado.", "filename": filename, "archivo_id": archivo_id}
+    
+    except HTTPException as e:
+        if os.path.exists(file_path): os.remove(file_path)
+        raise e
     except Exception as e:
         if os.path.exists(file_path): os.remove(file_path)
+        # Log del error para depuración
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al procesar archivo: {type(e).__name__}")
 
 @app.get("/get-csv-info/{filename}", response_model=CsvInfoResponse, tags=["Data Loading"])
@@ -136,14 +229,92 @@ async def get_csv_info_endpoint(filename: str):
     preview = safe_to_json(df.head(PREVIEW_ROWS))
     return CsvInfoResponse(stats=stats, preview_data=preview, headers=list(df.columns))
 
+def clean_record_for_json(data: Any) -> Any:
+    """Recursively traverses a data structure to convert non-JSON compliant values to None."""
+    if isinstance(data, dict):
+        return {key: clean_record_for_json(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [clean_record_for_json(element) for element in data]
+    if isinstance(data, (float, np.floating)) and not np.isfinite(data):
+        return None
+    if pd.isna(data):
+        return None
+    return data
+
 @app.post("/clean-data", response_model=CleanDataResponse, tags=["Data Cleaning"])
 async def clean_data_endpoint(request: CleanDataRequest):
-    file_path = get_file_path(request.filename)
+    # Obtener el nombre del archivo original desde la base de datos
+    try:
+        response = supabase.table('archivos_originales').select('filename').eq('id', request.archivo_id).single().execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail=f"No se encontró un archivo con ID {request.archivo_id}")
+        original_filename = response.data['filename']
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al buscar el archivo original: {e}")
+
+    file_path = get_file_path(original_filename)
     df = read_csv_robust(file_path)
-    cleaned_filename = f"cleaned_{request.filename}"
-    df.to_csv(os.path.join(UPLOAD_DIR, cleaned_filename), index=False)
-    stats = CsvInfoStats(rows=len(df), columns=len(df.columns), nullValues=int(df.isnull().sum().sum()), duplicates=int(df.duplicated().sum()))
-    return CleanDataResponse(message="Datos limpiados.", cleaned_filename=cleaned_filename, cleaned_stats=stats, preview_data=safe_to_json(df.head(PREVIEW_ROWS)), headers=list(df.columns))
+
+    text_cols = df.select_dtypes(include=['object', 'string']).columns
+
+    if not text_cols.empty:
+        mask_null_in_text = df[text_cols].isnull().any(axis=1)
+        discarded_rows_df = df[mask_null_in_text].copy()
+        clean_rows_df = df[~mask_null_in_text].copy()
+    else:
+        discarded_rows_df = pd.DataFrame(columns=df.columns)
+        clean_rows_df = df.copy()
+
+    # Convertir dataframes a JSON para almacenamiento
+    discarded_json = json.loads(discarded_rows_df.to_json(orient='records'))
+    clean_json = json.loads(clean_rows_df.to_json(orient='records'))
+
+    # Insertar registro único de filas descartadas
+    if not discarded_rows_df.empty:
+        try:
+            supabase.table('filas_con_nulos_descartadas').insert({
+                'archivo_id': request.archivo_id,
+                'row_data': discarded_json,
+                'reason': f"{len(discarded_rows_df)} filas descartadas por valores nulos en columnas de texto."
+            }).execute()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al insertar en Supabase (descartados): {e}")
+
+    # Insertar registro único de filas limpias y obtener el ID
+    datos_procesados_id = None
+    if not clean_rows_df.empty:
+        try:
+            response = supabase.table('datos_procesados').insert({
+                'archivo_id': request.archivo_id,
+                'row_data': clean_json
+            }).execute()
+            if not response.data:
+                raise HTTPException(status_code=500, detail="No se pudo obtener el ID de los datos procesados.")
+            datos_procesados_id = response.data[0]['id']
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al insertar en Supabase (procesados): {e}")
+
+    cleaned_filename = f"cleaned_{original_filename}"
+    cleaned_filepath = os.path.join(UPLOAD_DIR, cleaned_filename)
+    clean_rows_df.to_csv(cleaned_filepath, index=False)
+
+    response_stats = CsvInfoStats(
+        rows=len(clean_rows_df),
+        columns=len(clean_rows_df.columns),
+        nullValues=int(clean_rows_df.isnull().sum().sum()),
+        duplicates=int(clean_rows_df.duplicated().sum())
+    )
+    
+    message = f"Procesamiento completo. {len(clean_rows_df)} filas procesadas. {len(discarded_rows_df)} filas descartadas."
+
+    return {
+        "message": message,
+        "cleaned_filename": cleaned_filename,
+        "cleaned_stats": response_stats,
+        "preview_data": safe_to_json(clean_rows_df.head(PREVIEW_ROWS)),
+        "headers": list(clean_rows_df.columns),
+        "datos_procesados_id": datos_procesados_id
+    }
 
 @app.get("/view-data/{filename}", response_model=ViewDataResponse, tags=["Data Viewing"])
 async def view_data_endpoint(filename: str, page: int = 1, page_size: int = VIEW_PAGE_SIZE):
@@ -179,6 +350,41 @@ async def reset_session_endpoint():
             except Exception as e:
                 print(f"Failed to delete {item_path}. Reason: {e}")
     return {"message": f"Sesión reiniciada. {deleted_files} archivos eliminados."}
+
+@app.post("/export-to-db", response_model=SimpleMessageResponse, tags=["Model Training"])
+async def export_to_db_endpoint(results: ModelResultsExport):
+    try:
+        results_dict = results.dict()
+
+        training_params = {
+            "test_size": results_dict.pop("testSize"),
+            "random_state": results_dict.pop("randomState"),
+            "n_estimators": results_dict.pop("nEstimators"),
+            "max_depth": results_dict.pop("maxDepth"),
+            "features": results_dict.pop("features"),
+            "target": results_dict.pop("target")
+        }
+
+        data_to_insert = {
+            "datos_procesados_id": results_dict.pop("datos_procesados_id"),
+            "model_type": results_dict.pop("modelType"),
+            "model_name": results_dict.pop("model_name", None),
+            "accuracy": results_dict.pop("accuracy"),
+            "precision": results_dict.pop("precision"),
+            "recall": results_dict.pop("recall"),
+            "f1_score": results_dict.pop("f1Score"),
+            "confusion_matrix": results_dict.pop("confusionMatrix"),
+            "feature_importance": results_dict.pop("featureImportance"),
+            "training_parameters": training_params
+        }
+
+        data_to_insert = {k: v for k, v in data_to_insert.items() if v is not None}
+        
+        supabase.table("model_results").insert(data_to_insert).execute()
+        return {"message": "Resultados del modelo exportados a la base de datos exitosamente."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al exportar a la base de datos: {e}")
+
 
 @app.get("/", tags=["Utility"])
 def read_root():
