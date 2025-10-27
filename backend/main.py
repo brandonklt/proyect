@@ -46,7 +46,7 @@ VIEW_PAGE_SIZE = 50
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# --- Funciones Utilitarias (Completas) ---
+# --- Funciones Utilitarias ---
 def generate_filename(original_filename: str) -> str:
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     sanitized_original = "".join(c for c in original_filename if c.isalnum() or c in ('_', '.'))
@@ -91,19 +91,27 @@ def read_csv_robust(file_path: str) -> pd.DataFrame:
 def safe_to_json(df_slice: pd.DataFrame) -> List[Dict[str, Any]]:
     if df_slice.empty: return []
     df_copy = df_slice.copy()
-    # Handle datetime objects first
     for col in df_copy.columns:
         if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
             if df_copy[col].dt.tz is not None:
                 df_copy[col] = df_copy[col].dt.tz_convert('UTC').dt.tz_localize(None)
             df_copy[col] = df_copy[col].dt.strftime('%Y-%m-%dT%H:%M:%SZ').replace({pd.NaT: None})
-    
-    # Convert to records and then clean each one
     records = df_copy.to_dict(orient='records')
     clean_records = [clean_record_for_json(rec) for rec in records]
     return clean_records
 
-# --- Modelos Pydantic (Completos) ---
+def clean_record_for_json(data: Any) -> Any:
+    if isinstance(data, dict):
+        return {key: clean_record_for_json(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [clean_record_for_json(element) for element in data]
+    if isinstance(data, (float, np.floating)) and not np.isfinite(data):
+        return None
+    if pd.isna(data):
+        return None
+    return data
+
+# --- Modelos Pydantic ---
 class FileUploadResponse(BaseModel):
     message: str
     filename: str
@@ -150,6 +158,8 @@ class TrainingMetrics(BaseModel):
     f1Score: Optional[float] = None
     confusionMatrix: Optional[List[List[int]]] = None
     featureImportance: Optional[List[Dict[str, Any]]] = None
+    lossHistory: Optional[List[float]] = None
+    scatterPlotData: Optional[Dict[str, List[Any]]] = None
 
 class TrainingResult(BaseModel):
     metrics: TrainingMetrics
@@ -161,7 +171,7 @@ class TrainModelResponse(BaseModel):
     result: TrainingResult
 
 class ModelResultsExport(BaseModel):
-    datos_procesados_id: int  # ID de los datos procesados utilizados
+    datos_procesados_id: Optional[int] = None
     modelType: str
     model_name: Optional[str] = None
     accuracy: float
@@ -169,55 +179,48 @@ class ModelResultsExport(BaseModel):
     recall: float
     f1Score: float
     confusionMatrix: List[List[int]]
-    featureImportance: List[Dict[str, Any]]
+    featureImportance: Optional[List[Dict[str, Any]]] = None
+    scatterPlotData: Optional[Dict[str, List[Any]]] = None
     testSize: int
     randomState: int
-    nEstimators: int
-    maxDepth: Optional[int] = None
     features: str
     target: str
     timestamp: Optional[str] = None
+    nEstimators: Optional[int] = None
+    maxDepth: Optional[int] = None
+    epochs: Optional[int] = None
+    learningRate: Optional[float] = None
+    hiddenLayers: Optional[Any] = None
+    activation: Optional[str] = None
 
 class SimpleMessageResponse(BaseModel):
     message: str
 
-# --- Endpoints API (Completos) ---
+# --- Endpoints API ---
 @app.post("/upload-csv", response_model=FileUploadResponse, tags=["Data Loading"])
 async def upload_csv_endpoint(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Tipo de archivo inválido.")
-    
     filename = generate_filename(file.filename)
     file_path = os.path.join(UPLOAD_DIR, filename)
-    
     try:
-        # Guardar archivo localmente
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
-        # Leer el contenido para guardarlo en la base de datos
         df = read_csv_robust(file_path)
         file_content = df.to_json(orient='records')
-
-        # Insertar en la tabla archivos_originales y obtener el ID
         response = supabase.table('archivos_originales').insert({
             'filename': filename,
             'file_content': file_content
         }).execute()
-
         if not response.data:
             raise HTTPException(status_code=500, detail="Error al guardar el archivo en la base de datos.")
-
         archivo_id = response.data[0]['id']
-
         return {"message": "Archivo subido y validado.", "filename": filename, "archivo_id": archivo_id}
-    
     except HTTPException as e:
         if os.path.exists(file_path): os.remove(file_path)
         raise e
     except Exception as e:
         if os.path.exists(file_path): os.remove(file_path)
-        # Log del error para depuración
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error al procesar archivo: {type(e).__name__}")
 
@@ -229,21 +232,8 @@ async def get_csv_info_endpoint(filename: str):
     preview = safe_to_json(df.head(PREVIEW_ROWS))
     return CsvInfoResponse(stats=stats, preview_data=preview, headers=list(df.columns))
 
-def clean_record_for_json(data: Any) -> Any:
-    """Recursively traverses a data structure to convert non-JSON compliant values to None."""
-    if isinstance(data, dict):
-        return {key: clean_record_for_json(value) for key, value in data.items()}
-    if isinstance(data, list):
-        return [clean_record_for_json(element) for element in data]
-    if isinstance(data, (float, np.floating)) and not np.isfinite(data):
-        return None
-    if pd.isna(data):
-        return None
-    return data
-
 @app.post("/clean-data", response_model=CleanDataResponse, tags=["Data Cleaning"])
 async def clean_data_endpoint(request: CleanDataRequest):
-    # Obtener el nombre del archivo original desde la base de datos
     try:
         response = supabase.table('archivos_originales').select('filename').eq('id', request.archivo_id).single().execute()
         if not response.data:
@@ -251,12 +241,9 @@ async def clean_data_endpoint(request: CleanDataRequest):
         original_filename = response.data['filename']
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al buscar el archivo original: {e}")
-
     file_path = get_file_path(original_filename)
     df = read_csv_robust(file_path)
-
     text_cols = df.select_dtypes(include=['object', 'string']).columns
-
     if not text_cols.empty:
         mask_null_in_text = df[text_cols].isnull().any(axis=1)
         discarded_rows_df = df[mask_null_in_text].copy()
@@ -264,12 +251,8 @@ async def clean_data_endpoint(request: CleanDataRequest):
     else:
         discarded_rows_df = pd.DataFrame(columns=df.columns)
         clean_rows_df = df.copy()
-
-    # Convertir dataframes a JSON para almacenamiento
     discarded_json = json.loads(discarded_rows_df.to_json(orient='records'))
     clean_json = json.loads(clean_rows_df.to_json(orient='records'))
-
-    # Insertar registro único de filas descartadas
     if not discarded_rows_df.empty:
         try:
             supabase.table('filas_con_nulos_descartadas').insert({
@@ -279,8 +262,6 @@ async def clean_data_endpoint(request: CleanDataRequest):
             }).execute()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al insertar en Supabase (descartados): {e}")
-
-    # Insertar registro único de filas limpias y obtener el ID
     datos_procesados_id = None
     if not clean_rows_df.empty:
         try:
@@ -293,20 +274,16 @@ async def clean_data_endpoint(request: CleanDataRequest):
             datos_procesados_id = response.data[0]['id']
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al insertar en Supabase (procesados): {e}")
-
     cleaned_filename = f"cleaned_{original_filename}"
     cleaned_filepath = os.path.join(UPLOAD_DIR, cleaned_filename)
     clean_rows_df.to_csv(cleaned_filepath, index=False)
-
     response_stats = CsvInfoStats(
         rows=len(clean_rows_df),
         columns=len(clean_rows_df.columns),
         nullValues=int(clean_rows_df.isnull().sum().sum()),
         duplicates=int(clean_rows_df.duplicated().sum())
     )
-    
     message = f"Procesamiento completo. {len(clean_rows_df)} filas procesadas. {len(discarded_rows_df)} filas descartadas."
-
     return {
         "message": message,
         "cleaned_filename": cleaned_filename,
@@ -327,12 +304,52 @@ async def view_data_endpoint(filename: str, page: int = 1, page_size: int = VIEW
     return ViewDataResponse(pagination=pagination, data=safe_to_json(df.iloc[start:end]), headers=list(df.columns))
 
 @app.post("/train-model", response_model=TrainModelResponse, tags=["Model Training"])
-def train_model_endpoint(filename: str=Form(...), modelType: str=Form(...), testSize: int=Form(...), randomState: int=Form(...), nEstimators: int=Form(...), maxDepth: int=Form(...), features: str=Form(...), target: str=Form(...)):
-    file_path = get_file_path(filename)
-    feature_list = [f.strip() for f in features.split(',') if f.strip()]
-    model_config = {"modelType": modelType, "testSize": testSize, "randomState": randomState, "nEstimators": nEstimators, "maxDepth": maxDepth, "features": feature_list, "target": target.strip()}
-    result_dict = train_model(file_path, model_config)
-    return {"message": "Entrenamiento completado.", "result": result_dict}
+def train_model_endpoint(
+    filename: str = Form(...),
+    modelType: str = Form(...),
+    testSize: int = Form(...),
+    randomState: int = Form(...),
+    features: str = Form(...),
+    target: str = Form(...),
+    nEstimators: Optional[int] = Form(100),
+    maxDepth: Optional[int] = Form(10),
+    epochs: Optional[int] = Form(50),
+    learningRate: Optional[float] = Form(0.001),
+    hiddenLayers: Optional[str] = Form('[64, 32]'),
+    activation: Optional[str] = Form('ReLU')
+):
+    try:
+        file_path = get_file_path(filename)
+        feature_list = [f.strip() for f in features.split(',') if f.strip()]
+        model_config = {
+            "modelType": modelType,
+            "testSize": testSize,
+            "randomState": randomState,
+            "features": feature_list,
+            "target": target.strip()
+        }
+        if modelType == 'RandomForestClassifier':
+            model_config.update({"nEstimators": nEstimators, "maxDepth": maxDepth})
+        elif modelType == 'NeuralNetwork':
+            try:
+                hidden_layers_list = json.loads(hiddenLayers)
+                if not isinstance(hidden_layers_list, list) or not all(isinstance(i, int) for i in hidden_layers_list):
+                    raise HTTPException(status_code=400, detail="'hiddenLayers' debe ser un array de enteros.")
+            except (json.JSONDecodeError, TypeError):
+                raise HTTPException(status_code=400, detail="Formato de 'hiddenLayers' inválido.")
+            model_config.update({
+                "epochs": epochs,
+                "learningRate": learningRate,
+                "hiddenLayers": hidden_layers_list,
+                "activation": activation
+            })
+        result_dict = train_model(file_path, model_config)
+        return {"message": "Entrenamiento completado.", "result": result_dict}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error inesperado: {e}")
 
 @app.post("/reset", response_model=SimpleMessageResponse, tags=["Utility"])
 async def reset_session_endpoint():
@@ -352,39 +369,48 @@ async def reset_session_endpoint():
     return {"message": f"Sesión reiniciada. {deleted_files} archivos eliminados."}
 
 @app.post("/export-to-db", response_model=SimpleMessageResponse, tags=["Model Training"])
-async def export_to_db_endpoint(results: ModelResultsExport):
+async def export_to_db_endpoint(results: Dict[str, Any]):
+    print("--- DEBUG: RAW DATA RECEIVED --- ")
+    print(results)
+    print("---------------------------------")
     try:
-        results_dict = results.dict()
-
+        validated_results = ModelResultsExport.parse_obj(results)
+        results_dict = validated_results.dict(exclude_unset=True)
         training_params = {
-            "test_size": results_dict.pop("testSize"),
-            "random_state": results_dict.pop("randomState"),
-            "n_estimators": results_dict.pop("nEstimators"),
-            "max_depth": results_dict.pop("maxDepth"),
-            "features": results_dict.pop("features"),
-            "target": results_dict.pop("target")
+            "test_size": results_dict.get("testSize"),
+            "random_state": results_dict.get("randomState"),
+            "features": results_dict.get("features"),
+            "target": results_dict.get("target")
         }
-
+        if validated_results.modelType == 'RandomForestClassifier':
+            training_params['n_estimators'] = results_dict.get("nEstimators")
+            training_params['max_depth'] = results_dict.get("maxDepth")
+        elif validated_results.modelType == 'NeuralNetwork':
+            training_params['epochs'] = results_dict.get("epochs")
+            training_params['learning_rate'] = results_dict.get("learningRate")
+            training_params['hidden_layers'] = results_dict.get("hiddenLayers")
+            training_params['activation'] = results_dict.get("activation")
         data_to_insert = {
-            "datos_procesados_id": results_dict.pop("datos_procesados_id"),
-            "model_type": results_dict.pop("modelType"),
-            "model_name": results_dict.pop("model_name", None),
-            "accuracy": results_dict.pop("accuracy"),
-            "precision": results_dict.pop("precision"),
-            "recall": results_dict.pop("recall"),
-            "f1_score": results_dict.pop("f1Score"),
-            "confusion_matrix": results_dict.pop("confusionMatrix"),
-            "feature_importance": results_dict.pop("featureImportance"),
-            "training_parameters": training_params
+            "datos_procesados_id": results_dict.get("datos_procesados_id"),
+            "model_type": results_dict.get("modelType"),
+            "model_name": results_dict.get("model_name"),
+            "accuracy": results_dict.get("accuracy"),
+            "precision": results_dict.get("precision"),
+            "recall": results_dict.get("recall"),
+            "f1_score": results_dict.get("f1Score"),
+            "confusion_matrix": results_dict.get("confusionMatrix"),
+            "feature_importance": results_dict.get("featureImportance"),
+            "scatter_plot_data": results_dict.get("scatterPlotData"),
+            "training_parameters": {k: v for k, v in training_params.items() if v is not None}
         }
-
         data_to_insert = {k: v for k, v in data_to_insert.items() if v is not None}
-        
         supabase.table("model_results").insert(data_to_insert).execute()
         return {"message": "Resultados del modelo exportados a la base de datos exitosamente."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al exportar a la base de datos: {e}")
-
+        print("--- DEBUG: VALIDATION ERROR ---")
+        traceback.print_exc()
+        print("-------------------------------")
+        raise HTTPException(status_code=500, detail=f"Error de validación o procesamiento: {e}")
 
 @app.get("/", tags=["Utility"])
 def read_root():

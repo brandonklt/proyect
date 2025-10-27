@@ -219,4 +219,3 @@ const CleanData = () => {
 };
 
 export default CleanData;
-
