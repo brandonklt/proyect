@@ -171,9 +171,8 @@ class TrainModelResponse(BaseModel):
     result: TrainingResult
 
 class ModelResultsExport(BaseModel):
-    datos_procesados_id: Optional[int] = None
+    datos_procesados_id: int
     modelType: str
-    model_name: Optional[str] = None
     accuracy: float
     precision: float
     recall: float
@@ -185,13 +184,31 @@ class ModelResultsExport(BaseModel):
     randomState: int
     features: str
     target: str
-    timestamp: Optional[str] = None
+    timestamp: str
     nEstimators: Optional[int] = None
     maxDepth: Optional[int] = None
     epochs: Optional[int] = None
     learningRate: Optional[float] = None
-    hiddenLayers: Optional[Any] = None
+    hiddenLayers: Optional[List[int]] = None
     activation: Optional[str] = None
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "datos_procesados_id": 1,
+                "modelType": "NeuralNetwork",
+                "accuracy": 86.05,
+                "precision": 86.39,
+                "recall": 86.05,
+                "f1Score": 86.03,
+                "confusionMatrix": [[19, 2], [4, 18]],
+                "testSize": 20,
+                "randomState": 42,
+                "features": "Units Sold, Unit Price, Region, Payment Method",
+                "target": "Total Revenue",
+                "timestamp": "2025-10-26T03:29:06.754Z"
+            }
+        }
 
 class SimpleMessageResponse(BaseModel):
     message: str
@@ -390,21 +407,38 @@ async def export_to_db_endpoint(results: Dict[str, Any]):
             training_params['learning_rate'] = results_dict.get("learningRate")
             training_params['hidden_layers'] = results_dict.get("hiddenLayers")
             training_params['activation'] = results_dict.get("activation")
+        # Verificar que el datos_procesados_id existe
+        if not results_dict.get("datos_procesados_id"):
+            raise HTTPException(
+                status_code=400,
+                detail="datos_procesados_id es requerido para establecer la relación con los datos procesados"
+            )
+
+        # Verificar que el ID existe en la tabla datos_procesados
+        datos_procesados = supabase.table("datos_procesados").select("id").eq("id", results_dict["datos_procesados_id"]).execute()
+        if not datos_procesados.data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No se encontró el registro de datos_procesados con id {results_dict['datos_procesados_id']}"
+            )
+
         data_to_insert = {
-            "datos_procesados_id": results_dict.get("datos_procesados_id"),
-            "model_type": results_dict.get("modelType"),
-            "model_name": results_dict.get("model_name"),
-            "accuracy": results_dict.get("accuracy"),
-            "precision": results_dict.get("precision"),
-            "recall": results_dict.get("recall"),
-            "f1_score": results_dict.get("f1Score"),
-            "confusion_matrix": results_dict.get("confusionMatrix"),
+            "datos_procesados_id": results_dict["datos_procesados_id"],
+            "model_type": results_dict["modelType"],
+            "accuracy": results_dict["accuracy"],
+            "precision": results_dict["precision"],
+            "recall": results_dict["recall"],
+            "f1_score": results_dict["f1Score"],
+            "confusion_matrix": results_dict["confusionMatrix"],
             "feature_importance": results_dict.get("featureImportance"),
-            "scatter_plot_data": results_dict.get("scatterPlotData"),
-            "training_parameters": {k: v for k, v in training_params.items() if v is not None}
+            "training_parameters": training_params
         }
-        data_to_insert = {k: v for k, v in data_to_insert.items() if v is not None}
-        supabase.table("model_results").insert(data_to_insert).execute()
+        
+        print("--- DEBUG: INSERTING DATA ---")
+        print(data_to_insert)
+        print("----------------------------")
+        
+        result = supabase.table("model_results").insert(data_to_insert).execute()
         return {"message": "Resultados del modelo exportados a la base de datos exitosamente."}
     except Exception as e:
         print("--- DEBUG: VALIDATION ERROR ---")
