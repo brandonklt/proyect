@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Search, X } from "lucide-react";
 
+const apiUrl = import.meta.env.VITE_API_URL;
+
 // Reusable DataTable Component with Search
 const DataTable = ({ title, data, headers }: { title: string, data: any[], headers: string[] }) => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -133,7 +135,7 @@ const ViewData = () => {
 
   useEffect(() => {
     const fetchAllData = async (file: string) => {
-      const response = await fetch(`http://127.0.0.1:8000/view-data/${file}?page=1&page_size=10000`);
+      const response = await fetch(`${apiUrl}/view-data/${file}?page=1&page_size=10000`);
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || `Failed to fetch data for ${file}`);

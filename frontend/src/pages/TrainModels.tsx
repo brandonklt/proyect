@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 
+const apiUrl = import.meta.env.VITE_API_URL;
+
 const TrainModels = () => {
   const [isTraining, setIsTraining] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -84,7 +86,7 @@ const TrainModels = () => {
     }, 500);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/train-model", {
+      const response = await fetch(`${apiUrl}/train-model`, {
         method: "POST",
         body: formData,
       });

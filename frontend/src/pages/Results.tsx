@@ -30,6 +30,8 @@ import {
 } from "recharts";
 import { CustomScatterPlot } from "@/components/ui/ScatterPlot";
 
+const apiUrl = import.meta.env.VITE_API_URL;
+
 const Results = () => {
   interface ModelResults {
     metrics: {
@@ -90,7 +92,7 @@ const Results = () => {
     if (!results) return;
     console.log("Exporting to DB:", results);
     try {
-      const response = await fetch("http://127.0.0.1:8000/export-to-db", {
+      const response = await fetch(`${apiUrl}/export-to-db`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(results),

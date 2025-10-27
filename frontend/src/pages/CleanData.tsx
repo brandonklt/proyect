@@ -14,6 +14,8 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
+const apiUrl = import.meta.env.VITE_API_URL;
+
 const CleanData = () => {
   const [currentFileName, setCurrentFileName] = useState<string | null>(null);
   const [currentFileId, setCurrentFileId] = useState<number | null>(null);
@@ -44,7 +46,7 @@ const CleanData = () => {
     const fetchCsvInfo = async () => {
       if (!fileName) return;
       try {
-        const response = await fetch(`http://127.0.0.1:8000/get-csv-info/${fileName}`);
+        const response = await fetch(`${apiUrl}/get-csv-info/${fileName}`);
         if (!response.ok) {
           const err = await response.json();
           throw new Error(err.detail || "Failed to fetch CSV info");
@@ -123,7 +125,7 @@ const CleanData = () => {
     }
     setIsProcessing(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/clean-data", {
+      const response = await fetch(`${apiUrl}/clean-data`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ archivo_id: currentFileId, operations: [] }),

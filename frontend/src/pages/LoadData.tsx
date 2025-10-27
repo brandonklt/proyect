@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 
+const apiUrl = import.meta.env.VITE_API_URL;
 const LoadData = () => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -110,7 +111,7 @@ const LoadData = () => {
     formData.append("file", uploadedFile);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/upload-csv", {
+      const response = await fetch(`${apiUrl}/upload-csv`, {
         method: "POST",
         body: formData,
       });
