@@ -10,6 +10,7 @@ import traceback
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import uvicorn
+import asyncio
 from database import supabase
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -455,10 +456,14 @@ def read_root():
     return {"message": "Backend ML/DL - Análisis de Datos está activo"}
 
 if __name__ == "__main__":
-    uvicorn.run(
+    config = uvicorn.Config(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        ssl_keyfile="key.pem",
-        ssl_certfile="cert.pem"
+        ssl_certfile=r"C:\Users\ASSI\Desktop\proyect\cert.pem",
+        ssl_keyfile=r"C:\Users\ASSI\Desktop\proyect\key.pem"
     )
+    server = uvicorn.Server(config)
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(server.serve())
