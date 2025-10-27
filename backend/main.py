@@ -9,7 +9,7 @@ import shutil
 import traceback
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-
+import uvicorn
 from database import supabase
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -453,3 +453,12 @@ async def export_to_db_endpoint(results: Dict[str, Any]):
 @app.get("/", tags=["Utility"])
 def read_root():
     return {"message": "Backend ML/DL - Análisis de Datos está activo"}
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        ssl_keyfile="key.pem",
+        ssl_certfile="cert.pem"
+    )
