@@ -100,6 +100,10 @@ const TrainModels = () => {
       setProgress(100);
 
       const datosProcesadosId = localStorage.getItem("datosProcesadosId");
+      if (!datosProcesadosId) {
+        console.warn("No se encontró el ID de datos procesados");
+      }
+
       const finalResults = {
         metrics: backendResult.result.metrics,
         accuracy: backendResult.result.metrics.accuracy,
@@ -114,9 +118,12 @@ const TrainModels = () => {
         },
         scatterPlotData: backendResult.result.metrics.scatterPlotData,
         modelType: backendResult.result.model_type,
+        datos_procesados_id: datosProcesadosId
+          ? parseInt(datosProcesadosId)
+          : null,
         testSize,
         randomState,
-        features: features.split(",").map((f) => f.trim()),
+        features: features,
         target,
         timestamp: new Date().toISOString(),
         ...(modelType === "RandomForestClassifier"
@@ -139,11 +146,13 @@ const TrainModels = () => {
         description: `${modelType} entrenado con accuracy de ${finalResults.accuracy}%`,
       });
       setTimeout(() => navigate("/results"), 1000);
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Error desconocido";
       clearInterval(progressInterval);
       toast({
         title: "Error en el entrenamiento",
-        description: error.message,
+        description: errorMessage,
         variant: "destructive",
       });
       setIsTraining(false);
