@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   Upload,
   Info,
+  LineChart as LineChartIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
@@ -24,46 +25,96 @@ import {
   Tooltip,
   Legend,
   BarChart as RechartsBarChart,
-  Cell,
+  LineChart,
+  Line,
 } from "recharts";
+import { CustomScatterPlot } from "@/components/ui/ScatterPlot";
 
 const Results = () => {
-  const [results, setResults] = useState<any>(null);
+  interface ModelResults {
+    metrics: {
+      accuracy: number;
+      precision: number;
+      recall: number;
+      f1Score: number;
+      confusionMatrix: number[][];
+      scatterPlotData: {
+        actual: number[];
+        predicted: number[];
+      };
+      lossHistory?: number[];
+      rocCurve: {
+        fpr: number[];
+        tpr: number[];
+      };
+      auc: number;
+    };
+    accuracy: number;
+    precision: number;
+    recall: number;
+    f1Score: number;
+    confusionMatrix: number[][];
+    featureImportance: { feature: string; importance: number }[];
+    trainingProgress: { epochs: number[]; loss: number[] };
+    scatterPlotData: {
+      actual: number[];
+      predicted: number[];
+    };
+    testSize: number;
+    randomState: number;
+    features: string[];
+    target: string;
+    timestamp: string;
+    nEstimators?: number;
+    maxDepth?: number;
+    epochs?: number;
+    learningRate?: number;
+    hiddenLayers?: number[];
+    activation?: string;
+    modelType: string;
+  }
+
+  const [results, setResults] = useState<ModelResults | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     const savedResults = localStorage.getItem("mlPipelineResults");
     if (savedResults) {
-      setResults(JSON.parse(savedResults));
+      const parsedResults = JSON.parse(savedResults);
+      console.log("DEBUG: Results from localStorage", parsedResults);
+      setResults(parsedResults);
     }
   }, []);
 
   const handleExportToDb = async () => {
     if (!results) return;
-
+    console.log("Exporting to DB:", results);
     try {
       const response = await fetch("http://127.0.0.1:8000/export-to-db", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(results),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
+        console.error(
+          "Export failed with status:",
+          response.status,
+          "and data:",
+          errorData
+        );
         throw new Error(errorData.detail || "Error al exportar los resultados");
       }
-
       toast({
         title: "Exportación exitosa",
-        description:
-          "Los resultados del modelo se han guardado en la base de datos.",
+        description: "Los resultados se han guardado en la base de datos.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Error desconocido";
       toast({
-        title: "Error en la exportación",
-        description: error.message,
+        title: "Error al cargar los resultados",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -95,13 +146,19 @@ const Results = () => {
     f1Score,
     confusionMatrix,
     featureImportance,
+    trainingProgress,
+    scatterPlotData,
     testSize,
     randomState,
-    nEstimators,
-    maxDepth,
     features,
     target,
     timestamp,
+    nEstimators,
+    maxDepth,
+    epochs,
+    learningRate,
+    hiddenLayers,
+    activation,
   } = results;
 
   const formattedTimestamp = new Date(timestamp).toLocaleString("es-ES", {
@@ -109,18 +166,222 @@ const Results = () => {
     timeStyle: "short",
   });
 
+  const lossChartData = trainingProgress?.epochs.map(
+    (epoch: number, index: number) => ({
+      epoch,
+      loss: trainingProgress.loss[index].toFixed(4),
+    })
+  );
+
+  const scatterChartData = scatterPlotData?.actual.map(
+    (actual: number, index: number) => ({
+      actual,
+      predicted: scatterPlotData.predicted[index],
+    })
+  );
+
+  const renderModelSpecificParams = () => {
+    if (modelType === "RandomForestClassifier") {
+      return (
+        <>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">N° Estimadores:</span>{" "}
+            <span className="font-semibold">{nEstimators}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Profundidad Máxima:</span>{" "}
+            <span className="font-semibold">{maxDepth}</span>
+          </div>
+        </>
+      );
+    }
+    if (modelType === "NeuralNetwork") {
+      return (
+        <>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Épocas:</span>{" "}
+            <span className="font-semibold">{epochs}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Tasa de Aprendizaje:</span>{" "}
+            <span className="font-semibold">{learningRate}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Arquitectura:</span>{" "}
+            <span className="font-semibold">
+              {JSON.stringify(hiddenLayers)}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Activación:</span>{" "}
+            <span className="font-semibold">{activation}</span>
+          </div>
+        </>
+      );
+    }
+    return null;
+  };
+
+  const renderAnalysisChart = () => {
+    if (
+      modelType === "NeuralNetwork" &&
+      results.metrics.lossHistory &&
+      results.metrics.lossHistory.length > 0
+    ) {
+      const data = results.metrics.lossHistory.map(
+        (loss: number, index: number) => ({
+          epoch: index + 1,
+          loss: loss,
+        })
+      );
+
+      return (
+        <div className="h-[500px] flex flex-col">
+          <div className="mb-4 text-center">
+            <h3 className="text-lg font-semibold">
+              Curva de Pérdida (Loss) del Entrenamiento
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Evolución del error del modelo en cada época
+            </p>
+          </div>
+          <div className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={data}
+                margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(var(--border))"
+                />
+                <XAxis
+                  dataKey="epoch"
+                  label={{
+                    value: "Época",
+                    position: "insideBottom",
+                    offset: -10,
+                  }}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                />
+                <YAxis
+                  label={{ value: "Loss", angle: -90, position: "insideLeft" }}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--background))",
+                    border: "1px solid hsl(var(--border))",
+                  }}
+                  formatter={(value: number) => [value.toFixed(4), "Loss"]}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="loss"
+                  name="Loss"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+    }
+
+    if (
+      modelType === "RandomForestClassifier" &&
+      featureImportance &&
+      featureImportance.length > 0
+    ) {
+      return (
+        <div className="h-[500px] flex flex-col">
+          <div className="mb-4 text-center">
+            <h3 className="text-lg font-semibold">
+              Importancia de Características
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Las características más importantes para el modelo
+            </p>
+          </div>
+          <div className="flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <RechartsBarChart
+                data={featureImportance}
+                layout="vertical"
+                margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+              >
+                <CartesianGrid
+                  horizontal={false}
+                  strokeDasharray="3 3"
+                  stroke="hsl(var(--border))"
+                />
+                <XAxis
+                  type="number"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                  tickFormatter={(value) => `${value}%`}
+                />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  width={180}
+                  tick={{ fontSize: 13, fill: "hsl(var(--foreground))" }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={0}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--background))",
+                    border: "1px solid hsl(var(--border))",
+                  }}
+                  formatter={(value: number) => [
+                    `${value.toFixed(2)}%`,
+                    "Importancia",
+                  ]}
+                />
+                <Bar
+                  dataKey="importance"
+                  name="Importancia"
+                  radius={[0, 4, 4, 0]}
+                  fill="hsl(var(--primary))"
+                />
+              </RechartsBarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-center py-12">
+        <Info className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-semibold mb-2">
+          No hay gráfico de análisis
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          No hay una visualización de análisis específica para este tipo de
+          modelo.
+        </p>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-4">
           <div className="flex justify-between items-center mb-4">
             <Link
-              to="/"
+              to="/train-models"
               className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Volver al dashboard
+              Volver a entrenar
             </Link>
             <Button onClick={handleExportToDb}>
               <Upload className="w-4 h-4 mr-2" />
@@ -136,17 +397,15 @@ const Results = () => {
                 Resultados del Entrenamiento
               </h1>
               <p className="text-muted-foreground">
-                Análisis detallado del rendimiento del modelo: {modelType}
+                Análisis del rendimiento del modelo: {modelType}
               </p>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container mx-auto px-6 py-8">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Columna Izquierda: Métricas y Gráficos */}
           <div className="lg:col-span-2 space-y-6">
             <Card className="p-6 shadow-card">
               <h3 className="text-xl font-semibold mb-4 flex items-center gap-3">
@@ -174,163 +433,63 @@ const Results = () => {
             </Card>
 
             <Card className="p-6 shadow-card">
-              <Tabs defaultValue="confusion-matrix">
+              <Tabs defaultValue="analysis">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="confusion-matrix">
                     <LayoutGrid className="w-4 h-4 mr-2" />
                     Matriz de Confusión
                   </TabsTrigger>
-                  <TabsTrigger value="feature-importance">
+                  <TabsTrigger value="analysis">
                     <BarChart className="w-4 h-4 mr-2" />
-                    Importancia de Features
+                    Análisis del Modelo
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="confusion-matrix">
-                  <div className="flex justify-center mt-4">
-                    <div className="grid grid-cols-2 gap-2 text-center w-100">
-                      <div className="p-8 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-500/50">
-                        <p className="text-sm text-green-900 dark:text-green-100">
-                          Verdaderos Positivos
-                        </p>
-                        <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                          {confusionMatrix[1][1]}
-                        </p>
-                      </div>
-                      <div className="p-8 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-500/50">
-                        <p className="text-sm text-red-900 dark:text-red-100">
-                          Falsos Positivos
-                        </p>
-                        <p className="text-2xl font-bold text-red-900 dark:text-red-100">
-                          {confusionMatrix[0][1]}
-                        </p>
-                      </div>
-                      <div className="p-8 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg border border-yellow-500/50">
-                        <p className="text-sm text-yellow-900 dark:text-yellow-100">
-                          Falsos Negativos
-                        </p>
-                        <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">
-                          {confusionMatrix[1][0]}
-                        </p>
-                      </div>
-                      <div className="p-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg border border-blue-500/50">
-                        <p className="text-sm text-blue-900 dark:text-blue-100">
-                          Verdaderos Negativos
-                        </p>
-                        <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                          {confusionMatrix[0][0]}
-                        </p>
+                  <div className="h-[500px] flex flex-col">
+                    <div className="mb-4 text-center">
+                      <h3 className="text-lg font-semibold">
+                        Matriz de Confusión
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Visualización de predicciones correctas e incorrectas
+                      </p>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="grid grid-cols-2 gap-1">
+                        {confusionMatrix.map((row, i) =>
+                          row.map((value, j) => (
+                            <div
+                              key={`${i}-${j}`}
+                              className="p-6 bg-muted/30 rounded-lg text-center"
+                              style={{
+                                backgroundColor: `hsl(var(--primary) / ${
+                                  (value /
+                                    Math.max(...confusionMatrix.flat())) *
+                                  0.3
+                                })`,
+                              }}
+                            >
+                              <div className="text-2xl font-bold">{value}</div>
+                              <div className="text-sm text-muted-foreground mt-2">
+                                {i === 0 && j === 0 && "Verdaderos Negativos"}
+                                {i === 0 && j === 1 && "Falsos Positivos"}
+                                {i === 1 && j === 0 && "Falsos Negativos"}
+                                {i === 1 && j === 1 && "Verdaderos Positivos"}
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>
                 </TabsContent>
-                <TabsContent value="feature-importance" className="mt-4">
-                  <div className="h-[500px] flex flex-col">
-                    <div className="mb-4 text-center">
-                      <h3 className="text-lg font-semibold">Importancia de Características</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Las características más importantes para las predicciones del modelo
-                      </p>
-                    </div>
-
-                    <div className="flex-1">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RechartsBarChart
-                          data={featureImportance}
-                          layout="vertical"
-                          margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
-                          barCategoryGap={12}
-                        >
-                          <defs>
-                            <linearGradient id="importanceGradient" x1="0" y1="0" x2="1" y2="0">
-                              <stop offset="0%" stopColor="#4f46e5" />
-                              <stop offset="100%" stopColor="#7c3aed" />
-                            </linearGradient>
-                          </defs>
-
-                          <CartesianGrid
-                            horizontal={false}
-                            strokeDasharray="3 3"
-                            stroke="hsl(var(--border))"
-                          />
-
-                          <XAxis
-                            type="number"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                            tickFormatter={(value) => `${value}%`}
-                          />
-
-                          <YAxis
-                            dataKey="name"
-                            type="category"
-                            width={180}
-                            tick={{
-                              fontSize: 13,
-                              fill: 'hsl(var(--foreground))',
-                              fontWeight: 500
-                            }}
-                            tickLine={false}
-                            axisLine={false}
-                            interval={0}
-                          />
-
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'hsl(var(--background))',
-                              border: '1px solid hsl(var(--border))',
-                              borderRadius: '0.5rem',
-                              padding: '0.75rem',
-                              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                            }}
-                            formatter={(value: number) => [
-                              `${value.toFixed(2)}% de importancia`,
-                              'Valor'
-                            ]}
-                            labelFormatter={(label) => `Característica: ${label}`}
-                          />
-
-                          <Bar
-                            dataKey="importance"
-                            name="Importancia"
-                            radius={[0, 4, 4, 0]}
-                            fill="url(#importanceGradient)"
-                            animationDuration={1500}
-                          >
-                            {featureImportance?.map((entry, index) => (
-                              <Cell
-                                key={`cell-${index}`}
-                                fill={`hsl(${220 + (index * 30)}, 70%, 60%)`}
-                              />
-                            ))}
-                          </Bar>
-                        </RechartsBarChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-muted/30 rounded-lg">
-                      <h4 className="text-sm font-medium mb-2 flex items-center">
-                        <Info className="w-4 h-4 mr-2" />
-                        Cómo interpretar este gráfico
-                      </h4>
-                      <ul className="text-xs text-muted-foreground space-y-1">
-                        <li className="flex items-start">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mt-1.5 mr-2 flex-shrink-0"></span>
-                          <span>Las barras más largas indican características más importantes para el modelo</span>
-                        </li>
-                        <li className="flex items-start">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary/70 mt-1.5 mr-2 flex-shrink-0"></span>
-                          <span>Pasa el cursor sobre las barras para ver los valores exactos</span>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
+                <TabsContent value="analysis" className="mt-4">
+                  {renderAnalysisChart()}
                 </TabsContent>
               </Tabs>
             </Card>
           </div>
 
-          {/* Columna Derecha: Detalles y Features */}
           <div className="space-y-6">
             <Card className="p-6 shadow-card">
               <h3 className="text-xl font-semibold mb-4 flex items-center gap-3">
@@ -339,33 +498,24 @@ const Results = () => {
               </h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Modelo:</span>{" "}
+                  <span className="text-muted-foreground">Modelo:</span>
                   <span className="font-semibold">{modelType}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Fecha:</span>{" "}
+                  <span className="text-muted-foreground">Fecha:</span>
                   <span className="font-semibold">{formattedTimestamp}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">
                     Tamaño del Test:
-                  </span>{" "}
+                  </span>
                   <span className="font-semibold">{testSize}%</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Random State:</span>{" "}
+                  <span className="text-muted-foreground">Random State:</span>
                   <span className="font-semibold">{randomState}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">N° Estimadores:</span>{" "}
-                  <span className="font-semibold">{nEstimators}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    Profundidad Máxima:
-                  </span>{" "}
-                  <span className="font-semibold">{maxDepth}</span>
-                </div>
+                {renderModelSpecificParams()}
               </div>
             </Card>
 
