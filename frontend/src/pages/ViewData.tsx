@@ -256,7 +256,7 @@ const ViewData = () => {
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="raw" className="text-sm">📊 Datos Crudos</TabsTrigger>
               <TabsTrigger value="processed" className="text-sm">✨ Datos Procesados</TabsTrigger>
-              <TabsTrigger value="discarded" className="text-sm">🗑️ Filas Descartadas</TabsTrigger>
+              <TabsTrigger value="discarded" className="text-sm">🗑️ Datos Descartados</TabsTrigger>
             </TabsList>
             
             <TabsContent value="raw" className="mt-4">
